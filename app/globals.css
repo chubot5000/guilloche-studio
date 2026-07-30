@@ -169,6 +169,11 @@ input:focus-visible {
   padding-top: 26px;
 }
 
+.mode-section {
+  padding-bottom: 24px;
+  padding-top: 24px;
+}
+
 .section-heading,
 .control-section summary,
 .control-label,
@@ -201,6 +206,61 @@ input:focus-visible {
   color: var(--accent-dark);
   font-size: 11px;
   padding: 4px 0;
+}
+
+.mode-grid {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.mode-card {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  min-height: 76px;
+  padding: 9px 8px;
+  text-align: left;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease;
+}
+
+.mode-card:hover {
+  border-color: #867e72;
+}
+
+.mode-card.is-active {
+  background: #e9e2d6;
+  border-color: var(--ink);
+  box-shadow: inset 0 -2px var(--accent);
+}
+
+.mode-card span,
+.mode-card strong,
+.mode-card small {
+  display: block;
+}
+
+.mode-card span {
+  color: var(--muted);
+  font-family: "Courier New", monospace;
+  font-size: 8px;
+  margin-bottom: 8px;
+}
+
+.mode-card strong {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.05;
+}
+
+.mode-card small {
+  color: var(--muted);
+  font-size: 8px;
+  margin-top: 4px;
+  text-transform: uppercase;
 }
 
 .preset-grid {
@@ -422,6 +482,11 @@ input[type="color"] {
   width: 20px;
 }
 
+input[type="color"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
 .preview-panel {
   background:
     linear-gradient(rgba(37, 43, 44, 0.045) 1px, transparent 1px),
@@ -560,6 +625,21 @@ input[type="color"] {
   max-height: calc(100vh - 245px);
   max-width: 100%;
   width: auto;
+}
+
+.artboard.is-transparent {
+  background-color: #eee9df;
+  background-image:
+    linear-gradient(45deg, #dcd7ce 25%, transparent 25%),
+    linear-gradient(-45deg, #dcd7ce 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #dcd7ce 75%),
+    linear-gradient(-45deg, transparent 75%, #dcd7ce 75%);
+  background-position:
+    0 0,
+    0 8px,
+    8px -8px,
+    -8px 0;
+  background-size: 16px 16px;
 }
 
 .plate-caption {

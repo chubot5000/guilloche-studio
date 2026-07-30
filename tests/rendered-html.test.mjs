@@ -29,9 +29,11 @@ test("renders the guilloche studio", async () => {
 
   const html = await response.text();
   assert.match(html, /<title>Rouletté — Guilloché Pattern Studio<\/title>/i);
-  assert.match(html, /Draw with mathematics/);
+  assert.match(html, /Draw in rings, ribbons, and fields/);
   assert.match(html, /Export vector/);
   assert.match(html, /Starting plate/);
   assert.match(html, /Live plate/);
+  assert.match(html, /Ribbon \/ tube/);
+  assert.match(html, /Background/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/);
 });

@@ -9,8 +9,11 @@ import {
 } from "react";
 
 type ColorMode = "single" | "layered";
+type PatternMode = "medallion" | "ribbon" | "field";
+type TubeStyle = "ribbon" | "tube";
 
 type Settings = {
+  mode: PatternMode;
   bands: number;
   innerRadius: number;
   outerRadius: number;
@@ -24,6 +27,15 @@ type Settings = {
   bandPhase: number;
   aspect: number;
   rotation: number;
+  tubeStyle: TubeStyle;
+  tubeWidth: number;
+  tubeBends: number;
+  tubeDepth: number;
+  tubeTaper: number;
+  fieldDensity: number;
+  fieldScale: number;
+  fieldDrift: number;
+  fieldCrossWeave: boolean;
   lineWeight: number;
   opacity: number;
   quality: number;
@@ -31,12 +43,20 @@ type Settings = {
   ink: string;
   palette: string;
   colorMode: ColorMode;
+  transparent: boolean;
 };
 
 type Preset = {
   name: string;
   note: string;
   settings: Partial<Settings>;
+};
+
+type RenderPath = {
+  d: string;
+  colorIndex: number;
+  opacity?: number;
+  weight?: number;
 };
 
 const VIEWBOX = 900;
@@ -49,7 +69,18 @@ const palettes: Record<string, string[]> = {
   Midnight: ["#18233B", "#40568D", "#7E4968", "#B5794D", "#18233B"],
 };
 
+const modeOptions: Array<{
+  mode: PatternMode;
+  label: string;
+  note: string;
+}> = [
+  { mode: "medallion", label: "Medallion", note: "Radial" },
+  { mode: "ribbon", label: "Ribbon / tube", note: "Flowing" },
+  { mode: "field", label: "Field", note: "Background" },
+];
+
 const baseSettings: Settings = {
+  mode: "medallion",
   bands: 3,
   innerRadius: 58,
   outerRadius: 348,
@@ -63,6 +94,15 @@ const baseSettings: Settings = {
   bandPhase: 0.5,
   aspect: 1,
   rotation: 0,
+  tubeStyle: "tube",
+  tubeWidth: 245,
+  tubeBends: 2,
+  tubeDepth: 118,
+  tubeTaper: 0.22,
+  fieldDensity: 34,
+  fieldScale: 1,
+  fieldDrift: 0.33,
+  fieldCrossWeave: false,
   lineWeight: 0.7,
   opacity: 0.84,
   quality: 9000,
@@ -70,18 +110,20 @@ const baseSettings: Settings = {
   ink: "#173A59",
   palette: "Treasury",
   colorMode: "layered",
+  transparent: false,
 };
 
 const presets: Preset[] = [
   {
     name: "Treasury",
-    note: "Interlocking bands",
+    note: "Interlocking rings",
     settings: {},
   },
   {
     name: "Rosette",
-    note: "Dense floral center",
+    note: "Floral medallion",
     settings: {
+      mode: "medallion",
       bands: 2,
       innerRadius: 18,
       outerRadius: 350,
@@ -96,38 +138,82 @@ const presets: Preset[] = [
     },
   },
   {
-    name: "Orbit",
-    note: "Open elliptical weave",
+    name: "Silk Ribbon",
+    note: "Flat flowing braid",
     settings: {
+      mode: "ribbon",
+      tubeStyle: "ribbon",
       bands: 4,
-      innerRadius: 106,
-      outerRadius: 336,
-      nodes: 97,
-      divisor: 31,
-      innerRipples: 5,
-      outerRipples: 17,
-      innerAmplitude: 16,
+      nodes: 127,
+      divisor: 37,
+      tubeWidth: 250,
+      tubeBends: 2,
+      tubeDepth: 126,
+      tubeTaper: 0.35,
+      innerRipples: 7,
+      outerRipples: 13,
+      innerAmplitude: 6,
       outerAmplitude: 12,
-      aspect: 0.72,
-      rotation: -12,
-      palette: "Midnight",
+      palette: "Vermilion",
     },
   },
   {
-    name: "Medallion",
-    note: "Fine radial lattice",
+    name: "Brass Tube",
+    note: "Rounded woven form",
     settings: {
+      mode: "ribbon",
+      tubeStyle: "tube",
       bands: 5,
-      innerRadius: 44,
-      outerRadius: 356,
-      nodes: 223,
-      divisor: 67,
-      innerRipples: 8,
-      outerRipples: 32,
-      innerAmplitude: 6,
-      outerAmplitude: 17,
-      lineWeight: 0.52,
+      nodes: 183,
+      divisor: 47,
+      tubeWidth: 310,
+      tubeBends: 1,
+      tubeDepth: 92,
+      tubeTaper: 0.12,
+      innerRipples: 5,
+      outerRipples: 17,
+      innerAmplitude: 5,
+      outerAmplitude: 16,
       palette: "Botanical",
+    },
+  },
+  {
+    name: "Engraver’s Field",
+    note: "Repeating backdrop",
+    settings: {
+      mode: "field",
+      fieldDensity: 38,
+      fieldScale: 0.82,
+      fieldDrift: 0.27,
+      fieldCrossWeave: false,
+      nodes: 119,
+      divisor: 43,
+      innerRipples: 8,
+      outerRipples: 17,
+      innerAmplitude: 9,
+      outerAmplitude: 13,
+      lineWeight: 0.58,
+      palette: "Treasury",
+    },
+  },
+  {
+    name: "Moiré Field",
+    note: "Cross-woven ground",
+    settings: {
+      mode: "field",
+      fieldDensity: 28,
+      fieldScale: 1.34,
+      fieldDrift: 0.48,
+      fieldCrossWeave: true,
+      nodes: 157,
+      divisor: 59,
+      innerRipples: 11,
+      outerRipples: 23,
+      innerAmplitude: 7,
+      outerAmplitude: 10,
+      lineWeight: 0.45,
+      opacity: 0.62,
+      palette: "Midnight",
     },
   },
 ];
@@ -135,9 +221,7 @@ const presets: Preset[] = [
 function gcd(a: number, b: number) {
   let x = Math.abs(a);
   let y = Math.abs(b);
-  while (y) {
-    [x, y] = [y, x % y];
-  }
+  while (y) [x, y] = [y, x % y];
   return x;
 }
 
@@ -145,7 +229,27 @@ function fixed(value: number) {
   return Number(value.toFixed(2));
 }
 
-function pathForBand(settings: Settings, band: number) {
+function rotatePoint(x: number, y: number, degrees: number) {
+  if (!degrees) return { x, y };
+  const angle = (degrees * Math.PI) / 180;
+  const dx = x - CENTER;
+  const dy = y - CENTER;
+  return {
+    x: CENTER + dx * Math.cos(angle) - dy * Math.sin(angle),
+    y: CENTER + dx * Math.sin(angle) + dy * Math.cos(angle),
+  };
+}
+
+function commandsFromPoints(points: Array<{ x: number; y: number }>) {
+  return points
+    .map(
+      (point, index) =>
+        `${index ? "L" : "M"}${fixed(point.x)} ${fixed(point.y)}`,
+    )
+    .join("");
+}
+
+function radialPaths(settings: Settings): RenderPath[] {
   const {
     bands,
     innerRadius,
@@ -176,8 +280,6 @@ function pathForBand(settings: Settings, band: number) {
     };
   };
 
-  const inner = boundary(band);
-  const outer = boundary(band + 1);
   const totalAngle = Math.PI * 2 * divisor;
   const pointCount = Math.min(
     24000,
@@ -189,48 +291,279 @@ function pathForBand(settings: Settings, band: number) {
   const maxRadius =
     outerRadius + Math.max(innerAmplitude, outerAmplitude) + 6;
   const fit = 395 / maxRadius;
-  const commands: string[] = [];
 
-  for (let index = 0; index <= pointCount; index += 1) {
-    const t = (totalAngle * index) / pointCount;
-    const r0 =
-      inner.radius +
-      Math.sin(t * inner.ripples + inner.phase) * inner.amplitude;
-    const r1 =
-      outer.radius +
-      Math.sin(t * outer.ripples + outer.phase) * outer.amplitude;
-    const halfRange = (r1 - r0) * 0.5;
-    const midpoint = r0 + halfRange;
-    const carrier =
-      Math.sin((t * nodes) / divisor + phase + band * bandPhase * 0.22) *
-      halfRange;
-    const radius = (midpoint + carrier) * fit;
-    const angle = t + rotationRadians;
-    const x = CENTER + Math.cos(angle) * radius * xScale;
-    const y = CENTER + Math.sin(angle) * radius * yScale;
-    commands.push(`${index ? "L" : "M"}${fixed(x)} ${fixed(y)}`);
-  }
+  return Array.from({ length: bands }, (_, band) => {
+    const inner = boundary(band);
+    const outer = boundary(band + 1);
+    const points: Array<{ x: number; y: number }> = [];
 
-  return commands.join("");
+    for (let index = 0; index <= pointCount; index += 1) {
+      const t = (totalAngle * index) / pointCount;
+      const r0 =
+        inner.radius +
+        Math.sin(t * inner.ripples + inner.phase) * inner.amplitude;
+      const r1 =
+        outer.radius +
+        Math.sin(t * outer.ripples + outer.phase) * outer.amplitude;
+      const halfRange = (r1 - r0) * 0.5;
+      const midpoint = r0 + halfRange;
+      const carrier =
+        Math.sin((t * nodes) / divisor + phase + band * bandPhase * 0.22) *
+        halfRange;
+      const radius = (midpoint + carrier) * fit;
+      const angle = t + rotationRadians;
+      points.push({
+        x: CENTER + Math.cos(angle) * radius * xScale,
+        y: CENTER + Math.sin(angle) * radius * yScale,
+      });
+    }
+
+    return { d: commandsFromPoints(points), colorIndex: band };
+  });
 }
 
-function svgMarkup(settings: Settings, paths: string[]) {
+function ribbonPaths(settings: Settings): RenderPath[] {
+  const {
+    bands,
+    nodes,
+    divisor,
+    innerRipples,
+    outerRipples,
+    innerAmplitude,
+    outerAmplitude,
+    phase,
+    bandPhase,
+    rotation,
+    tubeStyle,
+    tubeWidth,
+    tubeBends,
+    tubeDepth,
+    tubeTaper,
+    quality,
+  } = settings;
+  const pointCount = Math.min(18000, Math.max(2800, quality));
+  const carrierCycles = (nodes / divisor) * 12;
+
+  const frameAt = (progress: number) => {
+    const wave = Math.PI * 2 * tubeBends * progress + phase * 0.22;
+    const x = 74 + progress * 752;
+    const y =
+      CENTER +
+      tubeDepth * 0.72 * Math.sin(wave) +
+      tubeDepth * 0.18 * Math.sin(wave * 0.5 + 1.15);
+    const dx = 752;
+    const dy =
+      tubeDepth * 0.72 * Math.PI * 2 * tubeBends * Math.cos(wave) +
+      tubeDepth *
+        0.18 *
+        Math.PI *
+        tubeBends *
+        Math.cos(wave * 0.5 + 1.15);
+    const length = Math.hypot(dx, dy);
+    return { x, y, nx: -dy / length, ny: dx / length };
+  };
+
+  const boundaryOffset = (index: number, progress: number) => {
+    const boundaryProgress = index / bands;
+    const taper =
+      1 - tubeTaper * Math.pow(Math.abs(progress - 0.5) * 2, 1.7);
+    const base = (-0.5 + boundaryProgress) * tubeWidth * taper;
+    const ripples = Math.round(
+      innerRipples + (outerRipples - innerRipples) * boundaryProgress,
+    );
+    const amplitude =
+      innerAmplitude +
+      (outerAmplitude - innerAmplitude) * boundaryProgress;
+    return (
+      base +
+      Math.sin(
+        Math.PI * 2 * progress * ripples + bandPhase * index + phase * 0.17,
+      ) *
+        amplitude *
+        0.52
+    );
+  };
+
+  const place = (progress: number, offset: number) => {
+    const frame = frameAt(progress);
+    return rotatePoint(
+      frame.x + frame.nx * offset,
+      frame.y + frame.ny * offset,
+      rotation,
+    );
+  };
+
+  const paths: RenderPath[] = Array.from({ length: bands }, (_, band) => {
+    const points: Array<{ x: number; y: number }> = [];
+    for (let index = 0; index <= pointCount; index += 1) {
+      const progress = index / pointCount;
+      const a = boundaryOffset(band, progress);
+      const b = boundaryOffset(band + 1, progress);
+      const middle = (a + b) * 0.5;
+      const range = (b - a) * 0.5;
+      const weave =
+        Math.sin(
+          Math.PI * 2 * carrierCycles * progress +
+            phase +
+            band * bandPhase * 0.33,
+        ) * range;
+      points.push(place(progress, middle + weave));
+    }
+    const shade =
+      tubeStyle === "tube"
+        ? 0.5 + 0.5 * Math.sin((Math.PI * (band + 0.5)) / bands)
+        : 1;
+    return {
+      d: commandsFromPoints(points),
+      colorIndex: band,
+      opacity: shade,
+      weight: tubeStyle === "tube" ? 0.82 + shade * 0.25 : 1,
+    };
+  });
+
+  for (let boundary = 0; boundary <= bands; boundary += 1) {
+    const points: Array<{ x: number; y: number }> = [];
+    const edgePoints = 1000;
+    for (let index = 0; index <= edgePoints; index += 1) {
+      const progress = index / edgePoints;
+      points.push(place(progress, boundaryOffset(boundary, progress)));
+    }
+    const isEdge = boundary === 0 || boundary === bands;
+    paths.push({
+      d: commandsFromPoints(points),
+      colorIndex: Math.max(0, boundary - 1),
+      opacity: isEdge ? 0.52 : 0.2,
+      weight: isEdge ? 1.15 : 0.65,
+    });
+  }
+
+  return paths;
+}
+
+function fieldPaths(settings: Settings): RenderPath[] {
+  const {
+    nodes,
+    divisor,
+    innerRipples,
+    outerRipples,
+    innerAmplitude,
+    outerAmplitude,
+    phase,
+    bandPhase,
+    rotation,
+    fieldDensity,
+    fieldScale,
+    fieldDrift,
+    fieldCrossWeave,
+    quality,
+  } = settings;
+  const overscan = 180;
+  const totalSpan = VIEWBOX + overscan * 2;
+  const rowCount = fieldDensity + 14;
+  const rowGap = totalSpan / Math.max(1, rowCount - 1);
+  const pointsPerLine = Math.max(
+    420,
+    Math.min(1100, Math.round(quality / 10)),
+  );
+  const weaveCycles = (nodes / divisor) * fieldScale * 3.4;
+  const paths: RenderPath[] = [];
+
+  const line = (row: number, vertical: boolean) => {
+    const points: Array<{ x: number; y: number }> = [];
+    const base = -overscan + row * rowGap;
+    for (let index = 0; index <= pointsPerLine; index += 1) {
+      const progress = index / pointsPerLine;
+      const along = -overscan + progress * totalSpan;
+      const drift = row * fieldDrift;
+      const broad =
+        Math.sin(
+          Math.PI * 2 * progress * innerRipples * fieldScale * 0.22 +
+            drift +
+            phase,
+        ) *
+        innerAmplitude *
+        0.72;
+      const fine =
+        Math.sin(
+          Math.PI * 2 * progress * outerRipples * fieldScale * 0.16 -
+            drift * 0.61 +
+            phase * 0.5,
+        ) *
+        outerAmplitude *
+        0.52;
+      const weave =
+        Math.sin(
+          Math.PI * 2 * progress * weaveCycles +
+            drift * 1.7 +
+            bandPhase * row,
+        ) *
+        rowGap *
+        0.44;
+      const cross = base + broad + fine + weave;
+      const raw = vertical
+        ? { x: cross, y: along }
+        : { x: along, y: cross };
+      points.push(rotatePoint(raw.x, raw.y, rotation));
+    }
+    return commandsFromPoints(points);
+  };
+
+  for (let row = 0; row < rowCount; row += 1) {
+    paths.push({
+      d: line(row, false),
+      colorIndex: row,
+      opacity: 0.72 + (row % 3) * 0.08,
+    });
+  }
+
+  if (fieldCrossWeave) {
+    for (let row = 0; row < rowCount; row += 1) {
+      paths.push({
+        d: line(row, true),
+        colorIndex: row + 1,
+        opacity: 0.42 + (row % 2) * 0.08,
+        weight: 0.85,
+      });
+    }
+  }
+
+  return paths;
+}
+
+function generatePaths(settings: Settings) {
+  if (settings.mode === "ribbon") return ribbonPaths(settings);
+  if (settings.mode === "field") return fieldPaths(settings);
+  return radialPaths(settings);
+}
+
+function pathStroke(
+  settings: Settings,
+  path: RenderPath,
+  colors: string[],
+) {
+  return settings.colorMode === "single"
+    ? settings.ink
+    : colors[path.colorIndex % colors.length];
+}
+
+function svgMarkup(settings: Settings, paths: RenderPath[]) {
   const colors = palettes[settings.palette] ?? palettes.Treasury;
   const pathMarkup = paths
-    .map((path, index) => {
-      const stroke =
-        settings.colorMode === "single"
-          ? settings.ink
-          : colors[index % colors.length];
-      return `<path d="${path}" fill="none" stroke="${stroke}" stroke-width="${settings.lineWeight}" stroke-opacity="${settings.opacity}" stroke-linecap="round" stroke-linejoin="round"/>`;
+    .map((path) => {
+      const stroke = pathStroke(settings, path, colors);
+      return `<path d="${path.d}" fill="none" stroke="${stroke}" stroke-width="${settings.lineWeight * (path.weight ?? 1)}" stroke-opacity="${settings.opacity * (path.opacity ?? 1)}" stroke-linecap="round" stroke-linejoin="round"/>`;
     })
     .join("");
+  const paper = settings.transparent
+    ? ""
+    : `<rect width="100%" height="100%" fill="${settings.paper}"/>`;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${VIEWBOX} ${VIEWBOX}" width="${VIEWBOX}" height="${VIEWBOX}">
-  <title>Guilloché pattern</title>
+  <title>${settings.mode} guilloché pattern</title>
   <metadata>Generated with Rouletté Guilloché Studio</metadata>
-  <rect width="100%" height="100%" fill="${settings.paper}"/>
-  ${pathMarkup}
+  <defs><clipPath id="guilloche-plate"><rect width="${VIEWBOX}" height="${VIEWBOX}"/></clipPath></defs>
+  ${paper}
+  <g clip-path="url(#guilloche-plate)">${pathMarkup}</g>
 </svg>`;
 }
 
@@ -295,15 +628,7 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const renderSettings = useDeferredValue(settings);
-
-  const paths = useMemo(
-    () =>
-      Array.from({ length: renderSettings.bands }, (_, index) =>
-        pathForBand(renderSettings, index),
-      ),
-    [renderSettings],
-  );
-
+  const paths = useMemo(() => generatePaths(renderSettings), [renderSettings]);
   const colors =
     palettes[renderSettings.palette] ?? palettes[baseSettings.palette];
   const complexity = gcd(settings.nodes, settings.divisor);
@@ -328,6 +653,17 @@ export default function Home() {
     setActivePreset(preset.name);
   };
 
+  const chooseMode = (mode: PatternMode) => {
+    update("mode", mode);
+    flash(
+      mode === "ribbon"
+        ? "Ribbon geometry loaded."
+        : mode === "field"
+          ? "Background field loaded."
+          : "Radial geometry loaded.",
+    );
+  };
+
   const randomize = () => {
     const divisors = [17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67];
     const divisor = divisors[Math.floor(Math.random() * divisors.length)];
@@ -339,14 +675,21 @@ export default function Home() {
       bands: 2 + Math.floor(Math.random() * 4),
       nodes,
       divisor,
-      innerRipples: 4 + Math.floor(Math.random() * 8),
-      outerRipples: 15 + Math.floor(Math.random() * 20),
-      innerAmplitude: 4 + Math.floor(Math.random() * 15),
-      outerAmplitude: 10 + Math.floor(Math.random() * 25),
+      innerRipples: 4 + Math.floor(Math.random() * 9),
+      outerRipples: 14 + Math.floor(Math.random() * 20),
+      innerAmplitude: 4 + Math.floor(Math.random() * 14),
+      outerAmplitude: 9 + Math.floor(Math.random() * 24),
       phase: fixed(Math.random() * Math.PI * 2),
       bandPhase: fixed(0.2 + Math.random() * 1.5),
       aspect: fixed(0.72 + Math.random() * 0.56),
-      rotation: Math.floor(-30 + Math.random() * 61),
+      rotation: Math.floor(-24 + Math.random() * 49),
+      tubeWidth: 180 + Math.floor(Math.random() * 151),
+      tubeBends: 1 + Math.floor(Math.random() * 4),
+      tubeDepth: 55 + Math.floor(Math.random() * 111),
+      tubeTaper: fixed(Math.random() * 0.62),
+      fieldDensity: 20 + Math.floor(Math.random() * 37),
+      fieldScale: fixed(0.55 + Math.random() * 1.25),
+      fieldDrift: fixed(0.12 + Math.random() * 0.62),
       palette: paletteNames[Math.floor(Math.random() * paletteNames.length)],
     }));
     setActivePreset("Custom");
@@ -356,7 +699,7 @@ export default function Home() {
   const downloadSvg = () => {
     downloadBlob(
       new Blob([svg], { type: "image/svg+xml;charset=utf-8" }),
-      `guilloche-${settings.nodes}-${settings.divisor}.svg`,
+      `guilloche-${settings.mode}-${settings.nodes}-${settings.divisor}.svg`,
     );
     flash("Vector SVG exported.");
   };
@@ -379,13 +722,16 @@ export default function Home() {
       canvas.width = 2400;
       canvas.height = 2400;
       const context = canvas.getContext("2d");
-      if (!context) return;
+      if (!context) {
+        URL.revokeObjectURL(url);
+        return;
+      }
       context.drawImage(image, 0, 0, canvas.width, canvas.height);
       canvas.toBlob((blob) => {
         if (blob) {
           downloadBlob(
             blob,
-            `guilloche-${settings.nodes}-${settings.divisor}.png`,
+            `guilloche-${settings.mode}-${settings.nodes}-${settings.divisor}.png`,
           );
           flash("High-resolution PNG exported.");
         }
@@ -394,6 +740,28 @@ export default function Home() {
     };
     image.src = url;
   };
+
+  const modeCode =
+    settings.mode === "ribbon" ? "T" : settings.mode === "field" ? "F" : "R";
+  const structureLabel =
+    settings.mode === "field"
+      ? `${settings.fieldDensity} LINES${settings.fieldCrossWeave ? " × 2" : ""}`
+      : `${settings.bands} ${settings.bands === 1 ? "STRAND" : "STRANDS"}`;
+  const formula =
+    settings.mode === "ribbon"
+      ? {
+          symbol: "p(u)",
+          expression: "centerline(u) + normal(u) × weave(u)",
+        }
+      : settings.mode === "field"
+        ? {
+            symbol: "yᵢ(x)",
+            expression: "rowᵢ + wave₁(x) + wave₂(x) + driftᵢ",
+          }
+        : {
+            symbol: "r(t)",
+            expression: "mid + sin(t × nodes ÷ divisor) × range",
+          };
 
   return (
     <main className="app-shell">
@@ -407,18 +775,41 @@ export default function Home() {
             <small>GUILLOCHÉ STUDIO</small>
           </span>
         </a>
-        <p className="edition">EDITION 01 / PARAMETRIC ENGRAVING</p>
+        <p className="edition">EDITION 02 / CURVES, RIBBONS & FIELDS</p>
       </header>
 
       <div className="studio-grid" id="top">
         <aside className="controls-panel" aria-label="Pattern controls">
           <section className="intro">
             <p className="eyebrow">Pattern workshop</p>
-            <h1>Draw with mathematics.</h1>
+            <h1>Draw in rings, ribbons, and fields.</h1>
             <p>
-              Tune a circular sine weave into intricate, press-ready linework.
-              Every result remains fully editable as a vector.
+              Wrap the same mathematical weave around a medallion, along a
+              flowing tube, or across an entire background.
             </p>
+          </section>
+
+          <section className="control-section mode-section">
+            <div className="section-heading">
+              <h2>Construction</h2>
+            </div>
+            <div className="mode-grid">
+              {modeOptions.map((option, index) => (
+                <button
+                  type="button"
+                  key={option.mode}
+                  className={`mode-card ${
+                    settings.mode === option.mode ? "is-active" : ""
+                  }`}
+                  onClick={() => chooseMode(option.mode)}
+                  aria-pressed={settings.mode === option.mode}
+                >
+                  <span>0{index + 1}</span>
+                  <strong>{option.label}</strong>
+                  <small>{option.note}</small>
+                </button>
+              ))}
+            </div>
           </section>
 
           <section className="control-section preset-section">
@@ -454,35 +845,145 @@ export default function Home() {
               </span>
             </summary>
             <div className="control-stack">
-              <RangeControl
-                label="Bands"
-                value={settings.bands}
-                min={1}
-                max={6}
-                onChange={(value) => update("bands", value)}
-              />
-              <RangeControl
-                label="Inner radius"
-                value={settings.innerRadius}
-                min={8}
-                max={Math.max(28, settings.outerRadius - 30)}
-                onChange={(value) => update("innerRadius", value)}
-              />
-              <RangeControl
-                label="Outer radius"
-                value={settings.outerRadius}
-                min={settings.innerRadius + 30}
-                max={390}
-                onChange={(value) => update("outerRadius", value)}
-              />
-              <RangeControl
-                label="Aspect"
-                value={settings.aspect}
-                min={0.55}
-                max={1.45}
-                step={0.01}
-                onChange={(value) => update("aspect", value)}
-              />
+              {settings.mode === "medallion" && (
+                <>
+                  <RangeControl
+                    label="Bands"
+                    value={settings.bands}
+                    min={1}
+                    max={6}
+                    onChange={(value) => update("bands", value)}
+                  />
+                  <RangeControl
+                    label="Inner radius"
+                    value={settings.innerRadius}
+                    min={8}
+                    max={Math.max(28, settings.outerRadius - 30)}
+                    onChange={(value) => update("innerRadius", value)}
+                  />
+                  <RangeControl
+                    label="Outer radius"
+                    value={settings.outerRadius}
+                    min={settings.innerRadius + 30}
+                    max={390}
+                    onChange={(value) => update("outerRadius", value)}
+                  />
+                  <RangeControl
+                    label="Aspect"
+                    value={settings.aspect}
+                    min={0.55}
+                    max={1.45}
+                    step={0.01}
+                    onChange={(value) => update("aspect", value)}
+                  />
+                </>
+              )}
+
+              {settings.mode === "ribbon" && (
+                <>
+                  <div className="segmented" aria-label="Ribbon profile">
+                    <button
+                      type="button"
+                      className={
+                        settings.tubeStyle === "ribbon" ? "is-active" : ""
+                      }
+                      onClick={() => update("tubeStyle", "ribbon")}
+                    >
+                      Flat ribbon
+                    </button>
+                    <button
+                      type="button"
+                      className={
+                        settings.tubeStyle === "tube" ? "is-active" : ""
+                      }
+                      onClick={() => update("tubeStyle", "tube")}
+                    >
+                      Round tube
+                    </button>
+                  </div>
+                  <RangeControl
+                    label="Woven strands"
+                    value={settings.bands}
+                    min={1}
+                    max={6}
+                    onChange={(value) => update("bands", value)}
+                  />
+                  <RangeControl
+                    label="Ribbon width"
+                    value={settings.tubeWidth}
+                    min={60}
+                    max={360}
+                    onChange={(value) => update("tubeWidth", value)}
+                  />
+                  <RangeControl
+                    label="Path bends"
+                    value={settings.tubeBends}
+                    min={1}
+                    max={5}
+                    onChange={(value) => update("tubeBends", value)}
+                  />
+                  <RangeControl
+                    label="Bend depth"
+                    value={settings.tubeDepth}
+                    min={0}
+                    max={180}
+                    onChange={(value) => update("tubeDepth", value)}
+                  />
+                  <RangeControl
+                    label="End taper"
+                    value={settings.tubeTaper}
+                    min={0}
+                    max={0.8}
+                    step={0.01}
+                    onChange={(value) => update("tubeTaper", value)}
+                  />
+                </>
+              )}
+
+              {settings.mode === "field" && (
+                <>
+                  <RangeControl
+                    label="Field density"
+                    value={settings.fieldDensity}
+                    min={10}
+                    max={72}
+                    onChange={(value) => update("fieldDensity", value)}
+                  />
+                  <RangeControl
+                    label="Wave scale"
+                    value={settings.fieldScale}
+                    min={0.35}
+                    max={2.5}
+                    step={0.01}
+                    onChange={(value) => update("fieldScale", value)}
+                  />
+                  <RangeControl
+                    label="Row drift"
+                    value={settings.fieldDrift}
+                    min={0}
+                    max={1.5}
+                    step={0.01}
+                    onChange={(value) => update("fieldDrift", value)}
+                  />
+                  <div className="segmented" aria-label="Field weave">
+                    <button
+                      type="button"
+                      className={!settings.fieldCrossWeave ? "is-active" : ""}
+                      onClick={() => update("fieldCrossWeave", false)}
+                    >
+                      Flow lines
+                    </button>
+                    <button
+                      type="button"
+                      className={settings.fieldCrossWeave ? "is-active" : ""}
+                      onClick={() => update("fieldCrossWeave", true)}
+                    >
+                      Cross weave
+                    </button>
+                  </div>
+                </>
+              )}
+
               <RangeControl
                 label="Rotation"
                 value={settings.rotation}
@@ -521,11 +1022,19 @@ export default function Home() {
                   complexity === 1 ? "is-good" : "is-warning"
                 }`}
               >
-                <span>{complexity === 1 ? "Coprime pair" : `Shared factor ${complexity}`}</span>
+                <span>
+                  {settings.mode === "medallion"
+                    ? complexity === 1
+                      ? "Coprime pair"
+                      : `Shared factor ${complexity}`
+                    : `${(settings.nodes / settings.divisor).toFixed(2)} ratio`}
+                </span>
                 <small>
-                  {complexity === 1
-                    ? "Maximum overlap complexity"
-                    : "Try neighboring values for a denser weave"}
+                  {settings.mode === "medallion"
+                    ? complexity === 1
+                      ? "Maximum overlap complexity"
+                      : "Try neighboring values for a denser weave"
+                    : "Controls the braid frequency"}
                 </small>
               </div>
               <RangeControl
@@ -537,7 +1046,7 @@ export default function Home() {
                 onChange={(value) => update("phase", value)}
               />
               <RangeControl
-                label="Band offset"
+                label="Strand offset"
                 value={settings.bandPhase}
                 min={0}
                 max={2}
@@ -549,35 +1058,42 @@ export default function Home() {
 
           <details className="control-section">
             <summary>
-              <span>03 / Boundaries</span>
+              <span>
+                03 /{" "}
+                {settings.mode === "ribbon"
+                  ? "Edge texture"
+                  : settings.mode === "field"
+                    ? "Wave blend"
+                    : "Boundaries"}
+              </span>
               <span className="summary-mark" aria-hidden="true">
                 +
               </span>
             </summary>
             <div className="control-stack">
               <RangeControl
-                label="Inner ripples"
+                label="Primary ripples"
                 value={settings.innerRipples}
                 min={1}
                 max={40}
                 onChange={(value) => update("innerRipples", value)}
               />
               <RangeControl
-                label="Outer ripples"
+                label="Secondary ripples"
                 value={settings.outerRipples}
                 min={1}
                 max={48}
                 onChange={(value) => update("outerRipples", value)}
               />
               <RangeControl
-                label="Inner amplitude"
+                label="Primary amplitude"
                 value={settings.innerAmplitude}
                 min={0}
                 max={48}
                 onChange={(value) => update("innerAmplitude", value)}
               />
               <RangeControl
-                label="Outer amplitude"
+                label="Secondary amplitude"
                 value={settings.outerAmplitude}
                 min={0}
                 max={48}
@@ -610,6 +1126,22 @@ export default function Home() {
                   Layered
                 </button>
               </div>
+              <div className="segmented" aria-label="Background">
+                <button
+                  type="button"
+                  className={!settings.transparent ? "is-active" : ""}
+                  onClick={() => update("transparent", false)}
+                >
+                  Paper
+                </button>
+                <button
+                  type="button"
+                  className={settings.transparent ? "is-active" : ""}
+                  onClick={() => update("transparent", true)}
+                >
+                  Transparent
+                </button>
+              </div>
               <label className="select-control">
                 <span>Palette</span>
                 <select
@@ -632,6 +1164,7 @@ export default function Home() {
                       type="color"
                       value={settings.paper}
                       onChange={(event) => update("paper", event.target.value)}
+                      disabled={settings.transparent}
                     />
                     <code>{settings.paper}</code>
                   </span>
@@ -684,8 +1217,12 @@ export default function Home() {
         <section className="preview-panel" aria-label="Guilloché preview">
           <div className="preview-toolbar">
             <div>
-              <p className="eyebrow">Live plate</p>
-              <h2>{activePreset === "Custom" ? "Untitled study" : activePreset}</h2>
+              <p className="eyebrow">
+                Live plate / {settings.mode}
+              </p>
+              <h2>
+                {activePreset === "Custom" ? "Untitled study" : activePreset}
+              </h2>
             </div>
             <div className="toolbar-actions">
               <button className="secondary-button" type="button" onClick={copySvg}>
@@ -705,43 +1242,55 @@ export default function Home() {
             </div>
             <div className="artboard-wrap">
               <svg
-                className="artboard"
+                className={`artboard ${
+                  renderSettings.transparent ? "is-transparent" : ""
+                }`}
                 viewBox={`0 0 ${VIEWBOX} ${VIEWBOX}`}
                 role="img"
-                aria-label={`${settings.bands}-band guilloché pattern with ${settings.nodes} nodes and divisor ${settings.divisor}`}
+                aria-label={`${settings.mode} guilloché pattern with ${settings.nodes} nodes and divisor ${settings.divisor}`}
               >
-                <rect width="100%" height="100%" fill={renderSettings.paper} />
-                {paths.map((path, index) => (
-                  <path
-                    key={`${index}-${renderSettings.bands}`}
-                    d={path}
-                    fill="none"
-                    stroke={
-                      renderSettings.colorMode === "single"
-                        ? renderSettings.ink
-                        : colors[index % colors.length]
-                    }
-                    strokeWidth={renderSettings.lineWeight}
-                    strokeOpacity={renderSettings.opacity}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                ))}
+                <defs>
+                  <clipPath id="preview-plate">
+                    <rect width={VIEWBOX} height={VIEWBOX} />
+                  </clipPath>
+                </defs>
+                {!renderSettings.transparent && (
+                  <rect width="100%" height="100%" fill={renderSettings.paper} />
+                )}
+                <g clipPath="url(#preview-plate)">
+                  {paths.map((path, index) => (
+                    <path
+                      key={`${index}-${renderSettings.mode}`}
+                      d={path.d}
+                      fill="none"
+                      stroke={pathStroke(renderSettings, path, colors)}
+                      strokeWidth={
+                        renderSettings.lineWeight * (path.weight ?? 1)
+                      }
+                      strokeOpacity={
+                        renderSettings.opacity * (path.opacity ?? 1)
+                      }
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  ))}
+                </g>
               </svg>
             </div>
             <div className="plate-caption">
-              <span>PLATE R-{settings.nodes}.{settings.divisor}</span>
               <span>
-                {settings.bands} {settings.bands === 1 ? "BAND" : "BANDS"} /{" "}
-                {settings.quality.toLocaleString()} PTS
+                PLATE {modeCode}-{settings.nodes}.{settings.divisor}
+              </span>
+              <span>
+                {structureLabel} / {paths.length.toLocaleString()} PATHS
               </span>
             </div>
           </div>
 
           <div className="preview-footer">
             <div className="formula">
-              <span>r(t)</span>
-              <code>mid + sin(t × nodes ÷ divisor) × range</code>
+              <span>{formula.symbol}</span>
+              <code>{formula.expression}</code>
             </div>
             <button className="png-button" type="button" onClick={downloadPng}>
               Download 2400px PNG
