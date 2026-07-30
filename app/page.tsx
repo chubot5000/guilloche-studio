@@ -42,7 +42,6 @@ type Settings = {
   hatchHeight: number;
   hatchLength: number;
   hatchSpacing: number;
-  hatchRowPhase: number;
   hatchMargin: number;
   canvasRatio: CanvasRatio;
   lineWeight: number;
@@ -129,7 +128,6 @@ const baseSettings: Settings = {
   hatchHeight: 81,
   hatchLength: 271,
   hatchSpacing: 4.55,
-  hatchRowPhase: 0,
   hatchMargin: 68,
   canvasRatio: "1:1",
   lineWeight: 0.7,
@@ -254,7 +252,6 @@ const presets: Preset[] = [
       hatchHeight: 81,
       hatchLength: 271,
       hatchSpacing: 4.55,
-      hatchRowPhase: 0,
       hatchMargin: 68,
       lineWeight: 2.95,
       opacity: 1,
@@ -267,13 +264,12 @@ const presets: Preset[] = [
   },
   {
     name: "Security Hatch",
-    note: "Fine offset waves",
+    note: "Fine parallel waves",
     settings: {
       mode: "hatch",
       hatchHeight: 42,
       hatchLength: 184,
       hatchSpacing: 8.5,
-      hatchRowPhase: 0.06,
       hatchMargin: 24,
       lineWeight: 0.65,
       opacity: 0.92,
@@ -295,6 +291,31 @@ function gcd(a: number, b: number) {
 
 function fixed(value: number) {
   return Number(value.toFixed(2));
+}
+
+function precise(value: number) {
+  return Number(value.toFixed(3));
+}
+
+function safeHatchThickness(
+  settings: Pick<
+    Settings,
+    "hatchHeight" | "hatchLength" | "hatchSpacing"
+  >,
+) {
+  const maximumSlope = (Math.PI * settings.hatchHeight) / settings.hatchLength;
+  const minimumNormalSpacing =
+    settings.hatchSpacing / Math.hypot(1, maximumSlope);
+  const guarded = Math.min(12, minimumNormalSpacing * 0.9);
+  return Math.max(0.25, fixed(Math.floor(guarded / 0.05) * 0.05));
+}
+
+function withSafeHatchThickness(settings: Settings) {
+  if (settings.mode !== "hatch") return settings;
+  return {
+    ...settings,
+    lineWeight: Math.min(settings.lineWeight, safeHatchThickness(settings)),
+  };
 }
 
 function rotatePoint(
@@ -669,7 +690,6 @@ function hatchPaths(settings: Settings): RenderPath[] {
     hatchHeight,
     hatchLength,
     hatchSpacing,
-    hatchRowPhase,
     phase,
     rotation,
     quality,
@@ -680,33 +700,73 @@ function hatchPaths(settings: Settings): RenderPath[] {
   const endX = width + overscan;
   const horizontalSpan = endX - startX;
   const verticalSpan = height + overscan * 2;
-  const qualityScale = quality / 9000;
-  const pointCount = Math.max(
-    480,
-    Math.min(
-      2600,
-      Math.ceil((horizontalSpan / hatchLength) * 96 * qualityScale),
-    ),
-  );
   const rowCount = Math.ceil(verticalSpan / hatchSpacing) + 1;
   const amplitude = hatchHeight * 0.5;
+  const angularFrequency = (Math.PI * 2) / hatchLength;
+  const segmentsPerWave = quality >= 15000 ? 24 : quality <= 4800 ? 8 : 16;
+  const segmentCount = Math.max(
+    1,
+    Math.ceil((horizontalSpan / hatchLength) * segmentsPerWave),
+  );
+  const segmentWidth = horizontalSpan / segmentCount;
+
+  const curveSample = (x: number, baseline: number) => {
+    const angle = angularFrequency * x + phase;
+    return {
+      x,
+      y: baseline + amplitude * Math.sin(angle),
+      slope: amplitude * angularFrequency * Math.cos(angle),
+    };
+  };
 
   return Array.from({ length: rowCount }, (_, row) => {
     const baseline = -overscan + row * hatchSpacing;
-    const rowPhase = phase + row * hatchRowPhase;
-    const points: Array<{ x: number; y: number }> = [];
+    const first = curveSample(startX, baseline);
+    const firstPoint = rotatePoint(
+      first.x,
+      first.y,
+      rotation,
+      width,
+      height,
+    );
+    const commands = [
+      `M${precise(firstPoint.x)} ${precise(firstPoint.y)}`,
+    ];
 
-    for (let index = 0; index <= pointCount; index += 1) {
-      const x = startX + (horizontalSpan * index) / pointCount;
-      const y =
-        baseline +
-        amplitude *
-          Math.sin((Math.PI * 2 * x) / hatchLength + rowPhase);
-      points.push(rotatePoint(x, y, rotation, width, height));
+    for (let index = 0; index < segmentCount; index += 1) {
+      const x0 = startX + index * segmentWidth;
+      const x1 = index === segmentCount - 1 ? endX : x0 + segmentWidth;
+      const segment = x1 - x0;
+      const start = curveSample(x0, baseline);
+      const end = curveSample(x1, baseline);
+      const controlA = rotatePoint(
+        x0 + segment / 3,
+        start.y + (start.slope * segment) / 3,
+        rotation,
+        width,
+        height,
+      );
+      const controlB = rotatePoint(
+        x1 - segment / 3,
+        end.y - (end.slope * segment) / 3,
+        rotation,
+        width,
+        height,
+      );
+      const endPoint = rotatePoint(
+        end.x,
+        end.y,
+        rotation,
+        width,
+        height,
+      );
+      commands.push(
+        `C${precise(controlA.x)} ${precise(controlA.y)} ${precise(controlB.x)} ${precise(controlB.y)} ${precise(endPoint.x)} ${precise(endPoint.y)}`,
+      );
     }
 
     return {
-      d: commandsFromPoints(points),
+      d: commands.join(""),
       colorIndex: row,
     };
   });
@@ -746,7 +806,7 @@ function svgMarkup(settings: Settings, paths: RenderPath[]) {
     ? ""
     : `<rect width="100%" height="100%" fill="${settings.paper}"/>`;
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" shape-rendering="geometricPrecision">
   <title>${settings.mode} guilloché pattern</title>
   <metadata>Generated with Rouletté Guilloché Studio · ${settings.canvasRatio}</metadata>
   <defs><clipPath id="guilloche-plate"><rect x="${clipInset}" y="${clipInset}" width="${clipWidth}" height="${clipHeight}"/></clipPath></defs>
@@ -842,11 +902,10 @@ function randomizedSettings(current: Settings): Settings {
     hatchHeight: 24 + Math.floor(Math.random() * 117),
     hatchLength: 110 + Math.floor(Math.random() * 331),
     hatchSpacing: fixed(4 + Math.random() * 13),
-    hatchRowPhase: fixed(Math.random() * 0.18),
     hatchMargin: Math.floor(Math.random() * 101),
     lineWeight:
       current.mode === "hatch"
-        ? fixed(0.35 + Math.random() * 5.65)
+        ? fixed(Math.round((0.35 + Math.random() * 5.65) * 20) / 20)
         : current.lineWeight,
     palette: paletteNames[Math.floor(Math.random() * paletteNames.length)],
   };
@@ -870,6 +929,7 @@ export default function Home() {
   const pngWidth = Math.round(
     2400 * (canvasSizes[settings.canvasRatio].width / CANVAS_HEIGHT),
   );
+  const hatchThicknessLimit = safeHatchThickness(settings);
 
   const flash = (message: string) => {
     setNotice(message);
@@ -879,7 +939,9 @@ export default function Home() {
 
   const update = <K extends keyof Settings>(key: K, value: Settings[K]) => {
     setActivePreset("Custom");
-    setSettings((current) => ({ ...current, [key]: value }));
+    setSettings((current) =>
+      withSafeHatchThickness({ ...current, [key]: value }),
+    );
   };
 
   const chooseCanvasRatio = (canvasRatio: CanvasRatio) => {
@@ -888,11 +950,13 @@ export default function Home() {
   };
 
   const choosePreset = (preset: Preset) => {
-    setSettings((current) => ({
-      ...baseSettings,
-      ...preset.settings,
-      canvasRatio: current.canvasRatio,
-    }));
+    setSettings((current) =>
+      withSafeHatchThickness({
+        ...baseSettings,
+        ...preset.settings,
+        canvasRatio: current.canvasRatio,
+      }),
+    );
     setActivePreset(preset.name);
   };
 
@@ -901,12 +965,14 @@ export default function Home() {
       (preset) => preset.settings.mode === mode,
     );
     setActivePreset(startingPlate?.name ?? "Custom");
-    setSettings((current) => ({
-      ...baseSettings,
-      ...startingPlate?.settings,
-      canvasRatio: current.canvasRatio,
-      mode,
-    }));
+    setSettings((current) =>
+      withSafeHatchThickness({
+        ...baseSettings,
+        ...startingPlate?.settings,
+        canvasRatio: current.canvasRatio,
+        mode,
+      }),
+    );
     flash(
       mode === "ribbon"
         ? "Ribbon geometry loaded."
@@ -919,7 +985,9 @@ export default function Home() {
   };
 
   const randomize = () => {
-    setSettings(randomizedSettings);
+    setSettings((current) =>
+      withSafeHatchThickness(randomizedSettings(current)),
+    );
     setActivePreset("Custom");
     flash("A new pattern is on the press.");
   };
@@ -1010,7 +1078,7 @@ export default function Home() {
           ? {
               symbol: "yᵢ(x)",
               expression:
-                "i·spacing + (height ÷ 2) sin(2πx ÷ length + phaseᵢ)",
+                "i·spacing + (height ÷ 2) sin(2πx ÷ length + phase)",
             }
         : {
             symbol: "r(t)",
@@ -1278,11 +1346,17 @@ export default function Home() {
                     label="Line thickness"
                     value={settings.lineWeight}
                     min={0.25}
-                    max={12}
+                    max={hatchThicknessLimit}
                     step={0.05}
                     unit=" px"
                     onChange={(value) => update("lineWeight", value)}
                   />
+                  <div className="math-note is-good">
+                    <span>No-overlap limit</span>
+                    <small>
+                      Up to {hatchThicknessLimit.toFixed(2)} px for this slope
+                    </small>
+                  </div>
                   <RangeControl
                     label="Edge margin"
                     value={settings.hatchMargin}
@@ -1331,20 +1405,12 @@ export default function Home() {
                   </div>
                 </>
               ) : settings.mode === "hatch" ? (
-                <>
-                  <RangeControl
-                    label="Row phase drift"
-                    value={settings.hatchRowPhase}
-                    min={-0.4}
-                    max={0.4}
-                    step={0.005}
-                    onChange={(value) => update("hatchRowPhase", value)}
-                  />
-                  <div className="math-note is-good">
-                    <span>Analytic sine</span>
-                    <small>Every row uses the same deterministic equation</small>
-                  </div>
-                </>
+                <div className="math-note is-good">
+                  <span>Congruent sine rows</span>
+                  <small>
+                    Identical curves, smooth tangents, constant stroke
+                  </small>
+                </div>
               ) : (
                 <>
                   <RangeControl
@@ -1636,6 +1702,7 @@ export default function Home() {
                 viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
                 width={canvasWidth}
                 height={canvasHeight}
+                shapeRendering="geometricPrecision"
                 role="img"
                 aria-label={
                   settings.mode === "ribbon"
