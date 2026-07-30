@@ -9,7 +9,7 @@ import {
 } from "react";
 
 type ColorMode = "single" | "layered";
-type PatternMode = "medallion" | "ribbon" | "field";
+type PatternMode = "medallion" | "ribbon" | "field" | "hatch";
 type TubeStyle = "ribbon" | "tube";
 
 type Settings = {
@@ -38,6 +38,11 @@ type Settings = {
   fieldScale: number;
   fieldDrift: number;
   fieldCrossWeave: boolean;
+  hatchHeight: number;
+  hatchLength: number;
+  hatchSpacing: number;
+  hatchRowPhase: number;
+  hatchMargin: number;
   lineWeight: number;
   opacity: number;
   quality: number;
@@ -79,6 +84,7 @@ const modeOptions: Array<{
   { mode: "medallion", label: "Medallion", note: "Radial" },
   { mode: "ribbon", label: "Ribbon / tube", note: "Flowing" },
   { mode: "field", label: "Field", note: "Background" },
+  { mode: "hatch", label: "Wave hatch", note: "Parallel sine" },
 ];
 
 const baseSettings: Settings = {
@@ -107,6 +113,11 @@ const baseSettings: Settings = {
   fieldScale: 1,
   fieldDrift: 0.33,
   fieldCrossWeave: false,
+  hatchHeight: 81,
+  hatchLength: 271,
+  hatchSpacing: 4.55,
+  hatchRowPhase: 0,
+  hatchMargin: 68,
   lineWeight: 0.7,
   opacity: 0.84,
   quality: 9000,
@@ -219,6 +230,44 @@ const presets: Preset[] = [
       lineWeight: 0.45,
       opacity: 0.62,
       palette: "Midnight",
+    },
+  },
+  {
+    name: "Reference Hatch",
+    note: "Supplied wave study",
+    settings: {
+      mode: "hatch",
+      hatchHeight: 81,
+      hatchLength: 271,
+      hatchSpacing: 4.55,
+      hatchRowPhase: 0,
+      hatchMargin: 68,
+      lineWeight: 2.95,
+      opacity: 1,
+      paper: "#D9D9D9",
+      ink: "#F7F2EB",
+      colorMode: "single",
+      rotation: 0,
+      phase: 0,
+    },
+  },
+  {
+    name: "Security Hatch",
+    note: "Fine offset waves",
+    settings: {
+      mode: "hatch",
+      hatchHeight: 42,
+      hatchLength: 184,
+      hatchSpacing: 8.5,
+      hatchRowPhase: 0.06,
+      hatchMargin: 24,
+      lineWeight: 0.65,
+      opacity: 0.92,
+      paper: "#F1EBDD",
+      ink: "#173A59",
+      colorMode: "single",
+      rotation: -8,
+      phase: 0.8,
     },
   },
 ];
@@ -575,9 +624,56 @@ function fieldPaths(settings: Settings): RenderPath[] {
   return paths;
 }
 
+function hatchPaths(settings: Settings): RenderPath[] {
+  const {
+    hatchHeight,
+    hatchLength,
+    hatchSpacing,
+    hatchRowPhase,
+    phase,
+    rotation,
+    quality,
+  } = settings;
+  const overscan = 340;
+  const start = -overscan;
+  const end = VIEWBOX + overscan;
+  const span = end - start;
+  const qualityScale = quality / 9000;
+  const pointCount = Math.max(
+    480,
+    Math.min(
+      1800,
+      Math.ceil((span / hatchLength) * 96 * qualityScale),
+    ),
+  );
+  const rowCount = Math.ceil(span / hatchSpacing) + 1;
+  const amplitude = hatchHeight * 0.5;
+
+  return Array.from({ length: rowCount }, (_, row) => {
+    const baseline = start + row * hatchSpacing;
+    const rowPhase = phase + row * hatchRowPhase;
+    const points: Array<{ x: number; y: number }> = [];
+
+    for (let index = 0; index <= pointCount; index += 1) {
+      const x = start + (span * index) / pointCount;
+      const y =
+        baseline +
+        amplitude *
+          Math.sin((Math.PI * 2 * x) / hatchLength + rowPhase);
+      points.push(rotatePoint(x, y, rotation));
+    }
+
+    return {
+      d: commandsFromPoints(points),
+      colorIndex: row,
+    };
+  });
+}
+
 function generatePaths(settings: Settings) {
   if (settings.mode === "ribbon") return ribbonPaths(settings);
   if (settings.mode === "field") return fieldPaths(settings);
+  if (settings.mode === "hatch") return hatchPaths(settings);
   return radialPaths(settings);
 }
 
@@ -593,10 +689,13 @@ function pathStroke(
 
 function svgMarkup(settings: Settings, paths: RenderPath[]) {
   const colors = palettes[settings.palette] ?? palettes.Treasury;
+  const clipInset = settings.mode === "hatch" ? settings.hatchMargin : 0;
+  const clipSize = VIEWBOX - clipInset * 2;
+  const linecap = settings.mode === "hatch" ? "butt" : "round";
   const pathMarkup = paths
     .map((path) => {
       const stroke = pathStroke(settings, path, colors);
-      return `<path d="${path.d}" fill="none" stroke="${stroke}" stroke-width="${settings.lineWeight * (path.weight ?? 1)}" stroke-opacity="${settings.opacity * (path.opacity ?? 1)}" stroke-linecap="round" stroke-linejoin="round"/>`;
+      return `<path d="${path.d}" fill="none" stroke="${stroke}" stroke-width="${settings.lineWeight * (path.weight ?? 1)}" stroke-opacity="${settings.opacity * (path.opacity ?? 1)}" stroke-linecap="${linecap}" stroke-linejoin="round"/>`;
     })
     .join("");
   const paper = settings.transparent
@@ -606,7 +705,7 @@ function svgMarkup(settings: Settings, paths: RenderPath[]) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${VIEWBOX} ${VIEWBOX}" width="${VIEWBOX}" height="${VIEWBOX}">
   <title>${settings.mode} guilloché pattern</title>
   <metadata>Generated with Rouletté Guilloché Studio</metadata>
-  <defs><clipPath id="guilloche-plate"><rect width="${VIEWBOX}" height="${VIEWBOX}"/></clipPath></defs>
+  <defs><clipPath id="guilloche-plate"><rect x="${clipInset}" y="${clipInset}" width="${clipSize}" height="${clipSize}"/></clipPath></defs>
   ${paper}
   <g clip-path="url(#guilloche-plate)">${pathMarkup}</g>
 </svg>`;
@@ -667,6 +766,44 @@ function RangeControl({
   );
 }
 
+function randomizedSettings(current: Settings): Settings {
+  const divisors = [17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67];
+  const divisor = divisors[Math.floor(Math.random() * divisors.length)];
+  let nodes = 80 + Math.floor(Math.random() * 151);
+  while (gcd(nodes, divisor) !== 1) nodes += 1;
+  const paletteNames = Object.keys(palettes);
+
+  return {
+    ...current,
+    bands: 2 + Math.floor(Math.random() * 4),
+    nodes,
+    divisor,
+    innerRipples: 4 + Math.floor(Math.random() * 9),
+    outerRipples: 14 + Math.floor(Math.random() * 20),
+    innerAmplitude: 4 + Math.floor(Math.random() * 14),
+    outerAmplitude: 9 + Math.floor(Math.random() * 24),
+    phase: fixed(Math.random() * Math.PI * 2),
+    bandPhase: fixed(0.2 + Math.random() * 1.5),
+    aspect: fixed(0.72 + Math.random() * 0.56),
+    rotation: Math.floor(-24 + Math.random() * 49),
+    tubeWidth: 180 + Math.floor(Math.random() * 151),
+    tubeThreads: 10 + Math.floor(Math.random() * 11),
+    tubeTwist: fixed(3 + Math.random() * 5),
+    tubeBends: fixed(0.8 + Math.random() * 2.7),
+    tubeDepth: 55 + Math.floor(Math.random() * 111),
+    tubeTaper: fixed(Math.random() * 0.62),
+    fieldDensity: 20 + Math.floor(Math.random() * 37),
+    fieldScale: fixed(0.55 + Math.random() * 1.25),
+    fieldDrift: fixed(0.12 + Math.random() * 0.62),
+    hatchHeight: 24 + Math.floor(Math.random() * 117),
+    hatchLength: 110 + Math.floor(Math.random() * 331),
+    hatchSpacing: fixed(4 + Math.random() * 13),
+    hatchRowPhase: fixed(Math.random() * 0.18),
+    hatchMargin: Math.floor(Math.random() * 101),
+    palette: paletteNames[Math.floor(Math.random() * paletteNames.length)],
+  };
+}
+
 export default function Home() {
   const [settings, setSettings] = useState<Settings>(baseSettings);
   const [activePreset, setActivePreset] = useState("Treasury");
@@ -699,54 +836,37 @@ export default function Home() {
   };
 
   const chooseMode = (mode: PatternMode) => {
-    update("mode", mode);
+    setActivePreset("Custom");
+    setSettings((current) => ({
+      ...current,
+      mode,
+      colorMode: mode === "hatch" ? "single" : current.colorMode,
+    }));
     flash(
       mode === "ribbon"
         ? "Ribbon geometry loaded."
         : mode === "field"
           ? "Background field loaded."
+          : mode === "hatch"
+            ? "Precision wave hatch loaded."
           : "Radial geometry loaded.",
     );
   };
 
   const randomize = () => {
-    const divisors = [17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67];
-    const divisor = divisors[Math.floor(Math.random() * divisors.length)];
-    let nodes = 80 + Math.floor(Math.random() * 151);
-    while (gcd(nodes, divisor) !== 1) nodes += 1;
-    const paletteNames = Object.keys(palettes);
-    setSettings((current) => ({
-      ...current,
-      bands: 2 + Math.floor(Math.random() * 4),
-      nodes,
-      divisor,
-      innerRipples: 4 + Math.floor(Math.random() * 9),
-      outerRipples: 14 + Math.floor(Math.random() * 20),
-      innerAmplitude: 4 + Math.floor(Math.random() * 14),
-      outerAmplitude: 9 + Math.floor(Math.random() * 24),
-      phase: fixed(Math.random() * Math.PI * 2),
-      bandPhase: fixed(0.2 + Math.random() * 1.5),
-      aspect: fixed(0.72 + Math.random() * 0.56),
-      rotation: Math.floor(-24 + Math.random() * 49),
-      tubeWidth: 180 + Math.floor(Math.random() * 151),
-      tubeThreads: 10 + Math.floor(Math.random() * 11),
-      tubeTwist: fixed(3 + Math.random() * 5),
-      tubeBends: fixed(0.8 + Math.random() * 2.7),
-      tubeDepth: 55 + Math.floor(Math.random() * 111),
-      tubeTaper: fixed(Math.random() * 0.62),
-      fieldDensity: 20 + Math.floor(Math.random() * 37),
-      fieldScale: fixed(0.55 + Math.random() * 1.25),
-      fieldDrift: fixed(0.12 + Math.random() * 0.62),
-      palette: paletteNames[Math.floor(Math.random() * paletteNames.length)],
-    }));
+    setSettings(randomizedSettings);
     setActivePreset("Custom");
     flash("A new pattern is on the press.");
   };
 
   const downloadSvg = () => {
+    const geometryCode =
+      settings.mode === "hatch"
+        ? `${settings.hatchHeight}x${settings.hatchLength}`
+        : `${settings.nodes}-${settings.divisor}`;
     downloadBlob(
       new Blob([svg], { type: "image/svg+xml;charset=utf-8" }),
-      `guilloche-${settings.mode}-${settings.nodes}-${settings.divisor}.svg`,
+      `guilloche-${settings.mode}-${geometryCode}.svg`,
     );
     flash("Vector SVG exported.");
   };
@@ -789,12 +909,20 @@ export default function Home() {
   };
 
   const modeCode =
-    settings.mode === "ribbon" ? "T" : settings.mode === "field" ? "F" : "R";
+    settings.mode === "ribbon"
+      ? "T"
+      : settings.mode === "field"
+        ? "F"
+        : settings.mode === "hatch"
+          ? "H"
+          : "R";
   const structureLabel =
     settings.mode === "field"
       ? `${paths.length.toLocaleString()} ENGRAVED LINES`
       : settings.mode === "ribbon"
         ? `${settings.tubeThreads} × 2 HELICAL THREADS`
+        : settings.mode === "hatch"
+          ? `${paths.length.toLocaleString()} PARALLEL WAVES`
         : `${settings.bands} ${settings.bands === 1 ? "STRAND" : "STRANDS"}`;
   const formula =
     settings.mode === "ribbon"
@@ -807,6 +935,12 @@ export default function Home() {
             symbol: "yᵢ(x)",
             expression: "rowᵢ + wave₁(x) + wave₂(x) + driftᵢ",
           }
+        : settings.mode === "hatch"
+          ? {
+              symbol: "yᵢ(x)",
+              expression:
+                "i·spacing + (height ÷ 2) sin(2πx ÷ length + phaseᵢ)",
+            }
         : {
             symbol: "r(t)",
             expression: "mid + sin(t × nodes ÷ divisor) × range",
@@ -824,17 +958,18 @@ export default function Home() {
             <small>GUILLOCHÉ STUDIO</small>
           </span>
         </a>
-        <p className="edition">EDITION 02 / CURVES, RIBBONS & FIELDS</p>
+        <p className="edition">EDITION 03 / CURVES, RIBBONS, FIELDS & WAVES</p>
       </header>
 
       <div className="studio-grid" id="top">
         <aside className="controls-panel" aria-label="Pattern controls">
           <section className="intro">
             <p className="eyebrow">Pattern workshop</p>
-            <h1>Draw in rings, ribbons, and fields.</h1>
+            <h1>Draw in rings, ribbons, fields, and waves.</h1>
             <p>
               Wrap the same mathematical weave around a medallion, along a
-              flowing tube, or across an entire background.
+              flowing tube, across a background, or into a precision sine
+              hatch.
             </p>
           </section>
 
@@ -1041,6 +1176,44 @@ export default function Home() {
                 </>
               )}
 
+              {settings.mode === "hatch" && (
+                <>
+                  <RangeControl
+                    label="Wave height"
+                    value={settings.hatchHeight}
+                    min={0}
+                    max={220}
+                    unit=" px"
+                    onChange={(value) => update("hatchHeight", value)}
+                  />
+                  <RangeControl
+                    label="Wavelength"
+                    value={settings.hatchLength}
+                    min={60}
+                    max={720}
+                    unit=" px"
+                    onChange={(value) => update("hatchLength", value)}
+                  />
+                  <RangeControl
+                    label="Line spacing"
+                    value={settings.hatchSpacing}
+                    min={4}
+                    max={30}
+                    step={0.05}
+                    unit=" px"
+                    onChange={(value) => update("hatchSpacing", value)}
+                  />
+                  <RangeControl
+                    label="Edge margin"
+                    value={settings.hatchMargin}
+                    min={0}
+                    max={180}
+                    unit=" px"
+                    onChange={(value) => update("hatchMargin", value)}
+                  />
+                </>
+              )}
+
               <RangeControl
                 label="Rotation"
                 value={settings.rotation}
@@ -1075,6 +1248,21 @@ export default function Home() {
                     <small>
                       Front and rear threads are depth-layered
                     </small>
+                  </div>
+                </>
+              ) : settings.mode === "hatch" ? (
+                <>
+                  <RangeControl
+                    label="Row phase drift"
+                    value={settings.hatchRowPhase}
+                    min={-0.4}
+                    max={0.4}
+                    step={0.005}
+                    onChange={(value) => update("hatchRowPhase", value)}
+                  />
+                  <div className="math-note is-good">
+                    <span>Analytic sine</span>
+                    <small>Every row uses the same deterministic equation</small>
                   </div>
                 </>
               ) : (
@@ -1125,62 +1313,66 @@ export default function Home() {
                 step={0.01}
                 onChange={(value) => update("phase", value)}
               />
-              <RangeControl
-                label="Strand offset"
-                value={settings.bandPhase}
-                min={0}
-                max={2}
-                step={0.01}
-                onChange={(value) => update("bandPhase", value)}
-              />
+              {settings.mode !== "hatch" && (
+                <RangeControl
+                  label="Strand offset"
+                  value={settings.bandPhase}
+                  min={0}
+                  max={2}
+                  step={0.01}
+                  onChange={(value) => update("bandPhase", value)}
+                />
+              )}
             </div>
           </details>
 
-          <details className="control-section">
-            <summary>
-              <span>
-                03 /{" "}
-                {settings.mode === "ribbon"
-                  ? "Edge texture"
-                  : settings.mode === "field"
-                    ? "Wave blend"
-                    : "Boundaries"}
-              </span>
-              <span className="summary-mark" aria-hidden="true">
-                +
-              </span>
-            </summary>
-            <div className="control-stack">
-              <RangeControl
-                label="Primary ripples"
-                value={settings.innerRipples}
-                min={1}
-                max={40}
-                onChange={(value) => update("innerRipples", value)}
-              />
-              <RangeControl
-                label="Secondary ripples"
-                value={settings.outerRipples}
-                min={1}
-                max={48}
-                onChange={(value) => update("outerRipples", value)}
-              />
-              <RangeControl
-                label="Primary amplitude"
-                value={settings.innerAmplitude}
-                min={0}
-                max={48}
-                onChange={(value) => update("innerAmplitude", value)}
-              />
-              <RangeControl
-                label="Secondary amplitude"
-                value={settings.outerAmplitude}
-                min={0}
-                max={48}
-                onChange={(value) => update("outerAmplitude", value)}
-              />
-            </div>
-          </details>
+          {settings.mode !== "hatch" && (
+            <details className="control-section">
+              <summary>
+                <span>
+                  03 /{" "}
+                  {settings.mode === "ribbon"
+                    ? "Edge texture"
+                    : settings.mode === "field"
+                      ? "Wave blend"
+                      : "Boundaries"}
+                </span>
+                <span className="summary-mark" aria-hidden="true">
+                  +
+                </span>
+              </summary>
+              <div className="control-stack">
+                <RangeControl
+                  label="Primary ripples"
+                  value={settings.innerRipples}
+                  min={1}
+                  max={40}
+                  onChange={(value) => update("innerRipples", value)}
+                />
+                <RangeControl
+                  label="Secondary ripples"
+                  value={settings.outerRipples}
+                  min={1}
+                  max={48}
+                  onChange={(value) => update("outerRipples", value)}
+                />
+                <RangeControl
+                  label="Primary amplitude"
+                  value={settings.innerAmplitude}
+                  min={0}
+                  max={48}
+                  onChange={(value) => update("innerAmplitude", value)}
+                />
+                <RangeControl
+                  label="Secondary amplitude"
+                  value={settings.outerAmplitude}
+                  min={0}
+                  max={48}
+                  onChange={(value) => update("outerAmplitude", value)}
+                />
+              </div>
+            </details>
+          )}
 
           <details className="control-section">
             <summary>
@@ -1265,7 +1457,7 @@ export default function Home() {
                 label="Line weight"
                 value={settings.lineWeight}
                 min={0.25}
-                max={2.5}
+                max={settings.mode === "hatch" ? 8 : 2.5}
                 step={0.05}
                 onChange={(value) => update("lineWeight", value)}
               />
@@ -1330,12 +1522,37 @@ export default function Home() {
                 aria-label={
                   settings.mode === "ribbon"
                     ? `${settings.tubeStyle} guilloché with ${settings.tubeThreads} helical threads and ${settings.tubeTwist} turns`
+                    : settings.mode === "hatch"
+                      ? `wave hatch with ${settings.hatchHeight} pixel height and ${settings.hatchLength} pixel wavelength`
                     : `${settings.mode} guilloché pattern with ${settings.nodes} nodes and divisor ${settings.divisor}`
                 }
               >
                 <defs>
                   <clipPath id="preview-plate">
-                    <rect width={VIEWBOX} height={VIEWBOX} />
+                    <rect
+                      x={
+                        renderSettings.mode === "hatch"
+                          ? renderSettings.hatchMargin
+                          : 0
+                      }
+                      y={
+                        renderSettings.mode === "hatch"
+                          ? renderSettings.hatchMargin
+                          : 0
+                      }
+                      width={
+                        VIEWBOX -
+                        (renderSettings.mode === "hatch"
+                          ? renderSettings.hatchMargin * 2
+                          : 0)
+                      }
+                      height={
+                        VIEWBOX -
+                        (renderSettings.mode === "hatch"
+                          ? renderSettings.hatchMargin * 2
+                          : 0)
+                      }
+                    />
                   </clipPath>
                 </defs>
                 {!renderSettings.transparent && (
@@ -1354,7 +1571,9 @@ export default function Home() {
                       strokeOpacity={
                         renderSettings.opacity * (path.opacity ?? 1)
                       }
-                      strokeLinecap="round"
+                      strokeLinecap={
+                        renderSettings.mode === "hatch" ? "butt" : "round"
+                      }
                       strokeLinejoin="round"
                     />
                   ))}
@@ -1363,7 +1582,10 @@ export default function Home() {
             </div>
             <div className="plate-caption">
               <span>
-                PLATE {modeCode}-{settings.nodes}.{settings.divisor}
+                PLATE {modeCode}-
+                {settings.mode === "hatch"
+                  ? `${settings.hatchHeight}.${settings.hatchLength}`
+                  : `${settings.nodes}.${settings.divisor}`}
               </span>
               <span>
                 {structureLabel}
