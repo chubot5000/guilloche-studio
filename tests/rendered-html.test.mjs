@@ -35,7 +35,13 @@ test("renders the guilloche studio", async () => {
   assert.match(html, /Live plate/);
   assert.match(html, /Ribbon \/ tube/);
   assert.match(html, /Wave hatch/);
-  assert.match(html, /Reference Hatch/);
+  assert.match(html, /Treasury/);
+  assert.match(html, /Rosette/);
+  assert.doesNotMatch(html, /Reference Hatch/);
+  assert.match(html, /Canvas aspect ratio/);
+  assert.match(html, /1:1/);
+  assert.match(html, /3:2/);
+  assert.match(html, /16:9/);
   assert.match(html, /Background/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/);
 });

@@ -11,6 +11,7 @@ import {
 type ColorMode = "single" | "layered";
 type PatternMode = "medallion" | "ribbon" | "field" | "hatch";
 type TubeStyle = "ribbon" | "tube";
+type CanvasRatio = "1:1" | "3:2" | "16:9";
 
 type Settings = {
   mode: PatternMode;
@@ -43,6 +44,7 @@ type Settings = {
   hatchSpacing: number;
   hatchRowPhase: number;
   hatchMargin: number;
+  canvasRatio: CanvasRatio;
   lineWeight: number;
   opacity: number;
   quality: number;
@@ -66,8 +68,19 @@ type RenderPath = {
   weight?: number;
 };
 
-const VIEWBOX = 900;
-const CENTER = VIEWBOX / 2;
+const CANVAS_HEIGHT = 900;
+const canvasSizes: Record<
+  CanvasRatio,
+  { width: number; height: number; label: string }
+> = {
+  "1:1": { width: 900, height: CANVAS_HEIGHT, label: "Square" },
+  "3:2": { width: 1350, height: CANVAS_HEIGHT, label: "Landscape" },
+  "16:9": { width: 1600, height: CANVAS_HEIGHT, label: "Widescreen" },
+};
+
+function canvasSize(settings: Pick<Settings, "canvasRatio">) {
+  return canvasSizes[settings.canvasRatio];
+}
 
 const palettes: Record<string, string[]> = {
   Treasury: ["#173A59", "#285E78", "#8D4C3E", "#C08C56", "#173A59"],
@@ -118,6 +131,7 @@ const baseSettings: Settings = {
   hatchSpacing: 4.55,
   hatchRowPhase: 0,
   hatchMargin: 68,
+  canvasRatio: "1:1",
   lineWeight: 0.7,
   opacity: 0.84,
   quality: 9000,
@@ -132,7 +146,7 @@ const presets: Preset[] = [
   {
     name: "Treasury",
     note: "Interlocking rings",
-    settings: {},
+    settings: { mode: "medallion" },
   },
   {
     name: "Rosette",
@@ -283,14 +297,22 @@ function fixed(value: number) {
   return Number(value.toFixed(2));
 }
 
-function rotatePoint(x: number, y: number, degrees: number) {
+function rotatePoint(
+  x: number,
+  y: number,
+  degrees: number,
+  width: number,
+  height: number,
+) {
   if (!degrees) return { x, y };
   const angle = (degrees * Math.PI) / 180;
-  const dx = x - CENTER;
-  const dy = y - CENTER;
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const dx = x - centerX;
+  const dy = y - centerY;
   return {
-    x: CENTER + dx * Math.cos(angle) - dy * Math.sin(angle),
-    y: CENTER + dx * Math.sin(angle) + dy * Math.cos(angle),
+    x: centerX + dx * Math.cos(angle) - dy * Math.sin(angle),
+    y: centerY + dx * Math.sin(angle) + dy * Math.cos(angle),
   };
 }
 
@@ -320,6 +342,9 @@ function radialPaths(settings: Settings): RenderPath[] {
     rotation,
     quality,
   } = settings;
+  const { width, height } = canvasSize(settings);
+  const centerX = width / 2;
+  const centerY = height / 2;
 
   const boundary = (index: number) => {
     const progress = index / bands;
@@ -367,8 +392,8 @@ function radialPaths(settings: Settings): RenderPath[] {
       const radius = (midpoint + carrier) * fit;
       const angle = t + rotationRadians;
       points.push({
-        x: CENTER + Math.cos(angle) * radius * xScale,
-        y: CENTER + Math.sin(angle) * radius * yScale,
+        x: centerX + Math.cos(angle) * radius * xScale,
+        y: centerY + Math.sin(angle) * radius * yScale,
       });
     }
 
@@ -395,16 +420,19 @@ function ribbonPaths(settings: Settings): RenderPath[] {
     tubeTaper,
     quality,
   } = settings;
+  const { width, height } = canvasSize(settings);
+  const horizontalMargin = Math.min(110, width * 0.082);
+  const run = width - horizontalMargin * 2;
   const pointCount = Math.min(1600, Math.max(600, Math.round(quality / 8)));
 
   const frameAt = (progress: number) => {
     const wave = Math.PI * 2 * tubeBends * progress + phase * 0.22;
-    const x = 74 + progress * 752;
+    const x = horizontalMargin + progress * run;
     const y =
-      CENTER +
+      height / 2 +
       tubeDepth * 0.72 * Math.sin(wave) +
       tubeDepth * 0.18 * Math.sin(wave * 0.5 + 1.15);
-    const dx = 752;
+    const dx = run;
     const dy =
       tubeDepth * 0.72 * Math.PI * 2 * tubeBends * Math.cos(wave) +
       tubeDepth *
@@ -449,6 +477,8 @@ function ribbonPaths(settings: Settings): RenderPath[] {
       frame.x + frame.nx * offset,
       frame.y + frame.ny * offset,
       rotation,
+      width,
+      height,
     );
   };
 
@@ -554,10 +584,12 @@ function fieldPaths(settings: Settings): RenderPath[] {
     fieldCrossWeave,
     quality,
   } = settings;
-  const overscan = 240;
-  const totalSpan = VIEWBOX + overscan * 2;
+  const { width, height } = canvasSize(settings);
+  const overscan = Math.ceil(Math.max(width, height) * 0.34);
+  const horizontalSpan = width + overscan * 2;
+  const verticalSpan = height + overscan * 2;
   const rowCount = fieldDensity * 2 + 12;
-  const rowGap = totalSpan / Math.max(1, rowCount - 1);
+  const rowGap = verticalSpan / Math.max(1, rowCount - 1);
   const pointsPerLine = Math.max(
     520,
     Math.min(1200, Math.round(quality / 9)),
@@ -570,7 +602,7 @@ function fieldPaths(settings: Settings): RenderPath[] {
     const base = -overscan + row * rowGap;
     for (let index = 0; index <= pointsPerLine; index += 1) {
       const progress = index / pointsPerLine;
-      const along = -overscan + progress * totalSpan;
+      const along = -overscan + progress * horizontalSpan;
       const drift = row * fieldDrift;
       const broad =
         Math.sin(
@@ -597,7 +629,15 @@ function fieldPaths(settings: Settings): RenderPath[] {
         rowGap *
         0.62;
       const cross = base + broad + fine + weave;
-      points.push(rotatePoint(along, cross, rotation + familyAngle));
+      points.push(
+        rotatePoint(
+          along,
+          cross,
+          rotation + familyAngle,
+          width,
+          height,
+        ),
+      );
     }
     return commandsFromPoints(points);
   };
@@ -634,33 +674,35 @@ function hatchPaths(settings: Settings): RenderPath[] {
     rotation,
     quality,
   } = settings;
-  const overscan = 340;
-  const start = -overscan;
-  const end = VIEWBOX + overscan;
-  const span = end - start;
+  const { width, height } = canvasSize(settings);
+  const overscan = Math.ceil(Math.max(width, height) * 0.45);
+  const startX = -overscan;
+  const endX = width + overscan;
+  const horizontalSpan = endX - startX;
+  const verticalSpan = height + overscan * 2;
   const qualityScale = quality / 9000;
   const pointCount = Math.max(
     480,
     Math.min(
-      1800,
-      Math.ceil((span / hatchLength) * 96 * qualityScale),
+      2600,
+      Math.ceil((horizontalSpan / hatchLength) * 96 * qualityScale),
     ),
   );
-  const rowCount = Math.ceil(span / hatchSpacing) + 1;
+  const rowCount = Math.ceil(verticalSpan / hatchSpacing) + 1;
   const amplitude = hatchHeight * 0.5;
 
   return Array.from({ length: rowCount }, (_, row) => {
-    const baseline = start + row * hatchSpacing;
+    const baseline = -overscan + row * hatchSpacing;
     const rowPhase = phase + row * hatchRowPhase;
     const points: Array<{ x: number; y: number }> = [];
 
     for (let index = 0; index <= pointCount; index += 1) {
-      const x = start + (span * index) / pointCount;
+      const x = startX + (horizontalSpan * index) / pointCount;
       const y =
         baseline +
         amplitude *
           Math.sin((Math.PI * 2 * x) / hatchLength + rowPhase);
-      points.push(rotatePoint(x, y, rotation));
+      points.push(rotatePoint(x, y, rotation, width, height));
     }
 
     return {
@@ -689,8 +731,10 @@ function pathStroke(
 
 function svgMarkup(settings: Settings, paths: RenderPath[]) {
   const colors = palettes[settings.palette] ?? palettes.Treasury;
+  const { width, height } = canvasSize(settings);
   const clipInset = settings.mode === "hatch" ? settings.hatchMargin : 0;
-  const clipSize = VIEWBOX - clipInset * 2;
+  const clipWidth = width - clipInset * 2;
+  const clipHeight = height - clipInset * 2;
   const linecap = settings.mode === "hatch" ? "butt" : "round";
   const pathMarkup = paths
     .map((path) => {
@@ -702,10 +746,10 @@ function svgMarkup(settings: Settings, paths: RenderPath[]) {
     ? ""
     : `<rect width="100%" height="100%" fill="${settings.paper}"/>`;
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${VIEWBOX} ${VIEWBOX}" width="${VIEWBOX}" height="${VIEWBOX}">
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
   <title>${settings.mode} guilloché pattern</title>
-  <metadata>Generated with Rouletté Guilloché Studio</metadata>
-  <defs><clipPath id="guilloche-plate"><rect x="${clipInset}" y="${clipInset}" width="${clipSize}" height="${clipSize}"/></clipPath></defs>
+  <metadata>Generated with Rouletté Guilloché Studio · ${settings.canvasRatio}</metadata>
+  <defs><clipPath id="guilloche-plate"><rect x="${clipInset}" y="${clipInset}" width="${clipWidth}" height="${clipHeight}"/></clipPath></defs>
   ${paper}
   <g clip-path="url(#guilloche-plate)">${pathMarkup}</g>
 </svg>`;
@@ -800,6 +844,10 @@ function randomizedSettings(current: Settings): Settings {
     hatchSpacing: fixed(4 + Math.random() * 13),
     hatchRowPhase: fixed(Math.random() * 0.18),
     hatchMargin: Math.floor(Math.random() * 101),
+    lineWeight:
+      current.mode === "hatch"
+        ? fixed(0.35 + Math.random() * 5.65)
+        : current.lineWeight,
     palette: paletteNames[Math.floor(Math.random() * paletteNames.length)],
   };
 }
@@ -814,9 +862,13 @@ export default function Home() {
   const colors =
     palettes[renderSettings.palette] ?? palettes[baseSettings.palette];
   const complexity = gcd(settings.nodes, settings.divisor);
-  const svg = useMemo(
-    () => svgMarkup(renderSettings, paths),
-    [renderSettings, paths],
+  const activePresets = presets.filter(
+    (preset) => preset.settings.mode === settings.mode,
+  );
+  const { width: canvasWidth, height: canvasHeight } =
+    canvasSize(renderSettings);
+  const pngWidth = Math.round(
+    2400 * (canvasSizes[settings.canvasRatio].width / CANVAS_HEIGHT),
   );
 
   const flash = (message: string) => {
@@ -830,17 +882,30 @@ export default function Home() {
     setSettings((current) => ({ ...current, [key]: value }));
   };
 
+  const chooseCanvasRatio = (canvasRatio: CanvasRatio) => {
+    setSettings((current) => ({ ...current, canvasRatio }));
+    flash(`${canvasRatio} canvas loaded.`);
+  };
+
   const choosePreset = (preset: Preset) => {
-    setSettings({ ...baseSettings, ...preset.settings });
+    setSettings((current) => ({
+      ...baseSettings,
+      ...preset.settings,
+      canvasRatio: current.canvasRatio,
+    }));
     setActivePreset(preset.name);
   };
 
   const chooseMode = (mode: PatternMode) => {
-    setActivePreset("Custom");
+    const startingPlate = presets.find(
+      (preset) => preset.settings.mode === mode,
+    );
+    setActivePreset(startingPlate?.name ?? "Custom");
     setSettings((current) => ({
-      ...current,
+      ...baseSettings,
+      ...startingPlate?.settings,
+      canvasRatio: current.canvasRatio,
       mode,
-      colorMode: mode === "hatch" ? "single" : current.colorMode,
     }));
     flash(
       mode === "ribbon"
@@ -860,20 +925,23 @@ export default function Home() {
   };
 
   const downloadSvg = () => {
+    const exportSvg = svgMarkup(settings, generatePaths(settings));
     const geometryCode =
       settings.mode === "hatch"
         ? `${settings.hatchHeight}x${settings.hatchLength}`
         : `${settings.nodes}-${settings.divisor}`;
     downloadBlob(
-      new Blob([svg], { type: "image/svg+xml;charset=utf-8" }),
-      `guilloche-${settings.mode}-${geometryCode}.svg`,
+      new Blob([exportSvg], { type: "image/svg+xml;charset=utf-8" }),
+      `guilloche-${settings.mode}-${geometryCode}-${settings.canvasRatio.replace(":", "x")}.svg`,
     );
     flash("Vector SVG exported.");
   };
 
   const copySvg = async () => {
     try {
-      await navigator.clipboard.writeText(svg);
+      await navigator.clipboard.writeText(
+        svgMarkup(settings, generatePaths(settings)),
+      );
       flash("SVG copied to clipboard.");
     } catch {
       flash("Clipboard access was unavailable.");
@@ -881,12 +949,15 @@ export default function Home() {
   };
 
   const downloadPng = () => {
-    const source = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+    const exportSvg = svgMarkup(settings, generatePaths(settings));
+    const source = new Blob([exportSvg], {
+      type: "image/svg+xml;charset=utf-8",
+    });
     const url = URL.createObjectURL(source);
     const image = new Image();
     image.onload = () => {
       const canvas = document.createElement("canvas");
-      canvas.width = 2400;
+      canvas.width = pngWidth;
       canvas.height = 2400;
       const context = canvas.getContext("2d");
       if (!context) {
@@ -898,7 +969,7 @@ export default function Home() {
         if (blob) {
           downloadBlob(
             blob,
-            `guilloche-${settings.mode}-${settings.nodes}-${settings.divisor}.png`,
+            `guilloche-${settings.mode}-${settings.canvasRatio.replace(":", "x")}.png`,
           );
           flash("High-resolution PNG exported.");
         }
@@ -1004,7 +1075,7 @@ export default function Home() {
               </button>
             </div>
             <div className="preset-grid">
-              {presets.map((preset, index) => (
+              {activePresets.map((preset, index) => (
                 <button
                   type="button"
                   key={preset.name}
@@ -1202,6 +1273,15 @@ export default function Home() {
                     step={0.05}
                     unit=" px"
                     onChange={(value) => update("hatchSpacing", value)}
+                  />
+                  <RangeControl
+                    label="Line thickness"
+                    value={settings.lineWeight}
+                    min={0.25}
+                    max={12}
+                    step={0.05}
+                    unit=" px"
+                    onChange={(value) => update("lineWeight", value)}
                   />
                   <RangeControl
                     label="Edge margin"
@@ -1453,14 +1533,17 @@ export default function Home() {
                   </span>
                 </label>
               </div>
-              <RangeControl
-                label="Line weight"
-                value={settings.lineWeight}
-                min={0.25}
-                max={settings.mode === "hatch" ? 8 : 2.5}
-                step={0.05}
-                onChange={(value) => update("lineWeight", value)}
-              />
+              {settings.mode !== "hatch" && (
+                <RangeControl
+                  label="Line weight"
+                  value={settings.lineWeight}
+                  min={0.25}
+                  max={2.5}
+                  step={0.05}
+                  unit=" px"
+                  onChange={(value) => update("lineWeight", value)}
+                />
+              )}
               <RangeControl
                 label="Ink opacity"
                 value={settings.opacity}
@@ -1496,20 +1579,53 @@ export default function Home() {
                 {activePreset === "Custom" ? "Untitled study" : activePreset}
               </h2>
             </div>
-            <div className="toolbar-actions">
-              <button className="secondary-button" type="button" onClick={copySvg}>
-                Copy SVG
-              </button>
-              <button className="primary-button" type="button" onClick={downloadSvg}>
-                Export vector <span aria-hidden="true">↓</span>
-              </button>
+            <div className="preview-tools">
+              <div className="canvas-control">
+                <span>Canvas</span>
+                <div className="ratio-buttons" aria-label="Canvas aspect ratio">
+                  {(Object.keys(canvasSizes) as CanvasRatio[]).map((ratio) => (
+                    <button
+                      type="button"
+                      key={ratio}
+                      className={
+                        settings.canvasRatio === ratio ? "is-active" : ""
+                      }
+                      aria-pressed={settings.canvasRatio === ratio}
+                      title={canvasSizes[ratio].label}
+                      onClick={() => chooseCanvasRatio(ratio)}
+                    >
+                      {ratio}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="toolbar-actions">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={copySvg}
+                >
+                  Copy SVG
+                </button>
+                <button
+                  className="primary-button"
+                  type="button"
+                  onClick={downloadSvg}
+                >
+                  Export vector <span aria-hidden="true">↓</span>
+                </button>
+              </div>
             </div>
           </div>
 
           <div className="artboard-frame">
             <div className="registration registration-top">
               <span />
-              <span>900 × 900</span>
+              <span>
+                {canvasSizes[settings.canvasRatio].width} ×{" "}
+                {canvasSizes[settings.canvasRatio].height} ·{" "}
+                {settings.canvasRatio}
+              </span>
               <span />
             </div>
             <div className="artboard-wrap">
@@ -1517,7 +1633,9 @@ export default function Home() {
                 className={`artboard ${
                   renderSettings.transparent ? "is-transparent" : ""
                 }`}
-                viewBox={`0 0 ${VIEWBOX} ${VIEWBOX}`}
+                viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
+                width={canvasWidth}
+                height={canvasHeight}
                 role="img"
                 aria-label={
                   settings.mode === "ribbon"
@@ -1541,13 +1659,13 @@ export default function Home() {
                           : 0
                       }
                       width={
-                        VIEWBOX -
+                        canvasWidth -
                         (renderSettings.mode === "hatch"
                           ? renderSettings.hatchMargin * 2
                           : 0)
                       }
                       height={
-                        VIEWBOX -
+                        canvasHeight -
                         (renderSettings.mode === "hatch"
                           ? renderSettings.hatchMargin * 2
                           : 0)
@@ -1599,7 +1717,7 @@ export default function Home() {
               <code>{formula.expression}</code>
             </div>
             <button className="png-button" type="button" onClick={downloadPng}>
-              Download 2400px PNG
+              Download {pngWidth} × 2400 PNG
             </button>
           </div>
         </section>
