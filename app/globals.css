@@ -273,6 +273,10 @@ input:focus-visible {
   grid-template-columns: 1fr 1fr;
 }
 
+.preset-card:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
 .preset-card {
   background: transparent;
   border: 1px solid var(--line);
@@ -431,6 +435,15 @@ input[type="range"]::-moz-range-thumb {
   display: grid;
   grid-template-columns: 1fr 1fr;
   padding: 3px;
+}
+
+.segmented.three-up {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.segmented.three-up button {
+  line-height: 1.15;
+  padding-inline: 4px;
 }
 
 .segmented button {

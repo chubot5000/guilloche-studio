@@ -12,6 +12,8 @@ type ColorMode = "single" | "layered";
 type PatternMode = "medallion" | "ribbon" | "field" | "hatch" | "globe";
 type TubeStyle = "ribbon" | "tube";
 type CanvasRatio = "1:1" | "3:2" | "16:9";
+type GlobeNodeStyle = "filled" | "stroked";
+type GlobeNodeShape = "circle" | "triangle" | "diamond";
 
 type Settings = {
   mode: PatternMode;
@@ -49,6 +51,10 @@ type Settings = {
   globeTilt: number;
   globeRoll: number;
   globeBackOpacity: number;
+  globeNodeAmount: number;
+  globeNodeSize: number;
+  globeNodeStyle: GlobeNodeStyle;
+  globeNodeShape: GlobeNodeShape;
   canvasRatio: CanvasRatio;
   lineWeight: number;
   opacity: number;
@@ -71,6 +77,8 @@ type RenderPath = {
   colorIndex: number;
   opacity?: number;
   weight?: number;
+  fill?: boolean;
+  stroke?: boolean;
 };
 
 type Vector3 = { x: number; y: number; z: number };
@@ -145,6 +153,10 @@ const baseSettings: Settings = {
   globeTilt: -8,
   globeRoll: 2,
   globeBackOpacity: 0.13,
+  globeNodeAmount: 0,
+  globeNodeSize: 4,
+  globeNodeStyle: "filled",
+  globeNodeShape: "circle",
   canvasRatio: "1:1",
   lineWeight: 0.7,
   opacity: 0.84,
@@ -271,6 +283,7 @@ const presets: Preset[] = [
       globeTilt: -8,
       globeRoll: 2,
       globeBackOpacity: 0.13,
+      globeNodeAmount: 0,
       lineWeight: 1.05,
       opacity: 0.9,
       paper: "#FBFAF7",
@@ -289,10 +302,36 @@ const presets: Preset[] = [
       globeTilt: -14,
       globeRoll: -5,
       globeBackOpacity: 0.08,
+      globeNodeAmount: 24,
+      globeNodeSize: 2.5,
+      globeNodeStyle: "stroked",
+      globeNodeShape: "diamond",
       lineWeight: 0.52,
       opacity: 0.86,
       paper: "#F4F0E7",
       ink: "#6D716E",
+      colorMode: "single",
+    },
+  },
+  {
+    name: "Nodal Sphere",
+    note: "Marked intersections",
+    settings: {
+      mode: "globe",
+      globeDetail: 2,
+      globeRadius: 355,
+      globeYaw: 8,
+      globeTilt: -11,
+      globeRoll: 0,
+      globeBackOpacity: 0.08,
+      globeNodeAmount: 100,
+      globeNodeSize: 4.5,
+      globeNodeStyle: "filled",
+      globeNodeShape: "circle",
+      lineWeight: 0.7,
+      opacity: 0.9,
+      paper: "#F8F4EA",
+      ink: "#765F52",
       colorMode: "single",
     },
   },
@@ -855,21 +894,65 @@ function rotateVector(
   };
 }
 
-function sphericalInterpolate(start: Vector3, end: Vector3, t: number) {
-  const dot = Math.max(
-    -1,
-    Math.min(1, start.x * end.x + start.y * end.y + start.z * end.z),
-  );
-  const angle = Math.acos(dot);
-  if (angle < 0.000001) return start;
-  const angleSin = Math.sin(angle);
-  const startWeight = Math.sin((1 - t) * angle) / angleSin;
-  const endWeight = Math.sin(t * angle) / angleSin;
-  return normalizeVector({
-    x: start.x * startWeight + end.x * endWeight,
-    y: start.y * startWeight + end.y * endWeight,
-    z: start.z * startWeight + end.z * endWeight,
+function roundedPolygonPath(
+  points: Array<{ x: number; y: number }>,
+  rounding: number,
+) {
+  const corners = points.map((point, index) => {
+    const previous = points[(index - 1 + points.length) % points.length];
+    const next = points[(index + 1) % points.length];
+    const previousLength = Math.hypot(previous.x - point.x, previous.y - point.y);
+    const nextLength = Math.hypot(next.x - point.x, next.y - point.y);
+    const inset = Math.min(rounding, previousLength * 0.42, nextLength * 0.42);
+    return {
+      point,
+      entry: {
+        x: point.x + ((previous.x - point.x) / previousLength) * inset,
+        y: point.y + ((previous.y - point.y) / previousLength) * inset,
+      },
+      exit: {
+        x: point.x + ((next.x - point.x) / nextLength) * inset,
+        y: point.y + ((next.y - point.y) / nextLength) * inset,
+      },
+    };
   });
+  return `${corners
+    .map(
+      (corner, index) =>
+        `${index ? "L" : "M"}${precise(corner.entry.x)} ${precise(corner.entry.y)}Q${precise(corner.point.x)} ${precise(corner.point.y)} ${precise(corner.exit.x)} ${precise(corner.exit.y)}`,
+    )
+    .join("")}L${precise(corners[0].entry.x)} ${precise(corners[0].entry.y)}Z`;
+}
+
+function globeNodePath(
+  x: number,
+  y: number,
+  size: number,
+  shape: GlobeNodeShape,
+) {
+  const radius = size / 2;
+  if (shape === "circle") {
+    return `M${precise(x - radius)} ${precise(y)}A${precise(radius)} ${precise(radius)} 0 1 0 ${precise(x + radius)} ${precise(y)}A${precise(radius)} ${precise(radius)} 0 1 0 ${precise(x - radius)} ${precise(y)}Z`;
+  }
+  if (shape === "triangle") {
+    return roundedPolygonPath(
+      [
+        { x, y: y - radius },
+        { x: x + radius * 0.92, y: y + radius * 0.68 },
+        { x: x - radius * 0.92, y: y + radius * 0.68 },
+      ],
+      size * 0.18,
+    );
+  }
+  return roundedPolygonPath(
+    [
+      { x, y: y - radius },
+      { x: x + radius, y },
+      { x, y: y + radius },
+      { x: x - radius, y },
+    ],
+    size * 0.2,
+  );
 }
 
 function globePaths(settings: Settings): RenderPath[] {
@@ -880,7 +963,10 @@ function globePaths(settings: Settings): RenderPath[] {
     globeTilt,
     globeRoll,
     globeBackOpacity,
-    quality,
+    globeNodeAmount,
+    globeNodeSize,
+    globeNodeStyle,
+    globeNodeShape,
   } = settings;
   const { width, height } = canvasSize(settings);
   const centerX = width / 2;
@@ -964,55 +1050,81 @@ function globePaths(settings: Settings): RenderPath[] {
     }
   }
 
-  const curveSamples = quality >= 15000 ? 10 : quality <= 4800 ? 4 : 7;
-  const projectedEdges = Array.from(edgeMap.values()).map(
+  const projectedVertices = vertices.map((vertex) => {
+    const rotated = rotateVector(vertex, globeYaw, globeTilt, globeRoll);
+    return {
+      x: centerX + rotated.x * globeRadius,
+      y: centerY - rotated.y * globeRadius,
+      z: rotated.z,
+    };
+  });
+  const visibilityAt = (depth: number) => {
+    const frontness = Math.max(0, Math.min(1, (depth + 0.18) / 0.48));
+    const smoothFrontness = frontness * frontness * (3 - 2 * frontness);
+    return globeBackOpacity + (1 - globeBackOpacity) * smoothFrontness;
+  };
+  const renderItems: Array<{
+    depth: number;
+    layer: number;
+    path: RenderPath;
+  }> = Array.from(edgeMap.values()).map(
     ([startIndex, endIndex], edgeIndex) => {
-      const start = vertices[startIndex];
-      const end = vertices[endIndex];
-      const commands: string[] = [];
-
-      for (let sample = 0; sample <= curveSamples; sample += 1) {
-        const point = sphericalInterpolate(start, end, sample / curveSamples);
-        const rotated = rotateVector(
-          point,
-          globeYaw,
-          globeTilt,
-          globeRoll,
-        );
-        const x = centerX + rotated.x * globeRadius;
-        const y = centerY - rotated.y * globeRadius;
-        commands.push(
-          `${sample ? "L" : "M"}${precise(x)} ${precise(y)}`,
-        );
-      }
-
-      const midpoint = rotateVector(
-        sphericalInterpolate(start, end, 0.5),
-        globeYaw,
-        globeTilt,
-        globeRoll,
-      );
-      const frontness = Math.max(0, Math.min(1, (midpoint.z + 0.18) / 0.48));
-      const smoothFrontness = frontness * frontness * (3 - 2 * frontness);
-
+      const start = projectedVertices[startIndex];
+      const end = projectedVertices[endIndex];
+      const depth = (start.z + end.z) / 2;
       return {
-        depth: midpoint.z,
+        depth,
+        layer: 0,
         path: {
-          d: commands.join(""),
+          d: `M${precise(start.x)} ${precise(start.y)}L${precise(end.x)} ${precise(end.y)}`,
           colorIndex: edgeIndex,
-          opacity:
-            globeBackOpacity + (1 - globeBackOpacity) * smoothFrontness,
-          weight: 0.72 + smoothFrontness * 0.28,
-        } satisfies RenderPath,
+          opacity: visibilityAt(depth),
+          weight: 1,
+        },
       };
     },
   );
 
-  projectedEdges.sort((left, right) => left.depth - right.depth);
+  const nodeCount = Math.round(
+    projectedVertices.length * (globeNodeAmount / 100),
+  );
+  const selectedNodeIndices = projectedVertices
+    .map((_, index) => ({
+      index,
+      order: Math.imul(index + 1, -1640531527) >>> 0,
+    }))
+    .sort((left, right) => left.order - right.order)
+    .slice(0, nodeCount)
+    .map(({ index }) => index);
+
+  for (const vertexIndex of selectedNodeIndices) {
+    const point = projectedVertices[vertexIndex];
+    renderItems.push({
+      depth: point.z,
+      layer: 1,
+      path: {
+        d: globeNodePath(
+          point.x,
+          point.y,
+          globeNodeSize,
+          globeNodeShape,
+        ),
+        colorIndex: vertexIndex,
+        opacity: visibilityAt(point.z),
+        weight: 1,
+        fill: globeNodeStyle === "filled",
+        stroke: globeNodeStyle === "stroked",
+      },
+    });
+  }
+
+  renderItems.sort(
+    (left, right) => left.depth - right.depth || left.layer - right.layer,
+  );
   const outline = `M${precise(centerX - globeRadius)} ${precise(centerY)}A${precise(globeRadius)} ${precise(globeRadius)} 0 1 0 ${precise(centerX + globeRadius)} ${precise(centerY)}A${precise(globeRadius)} ${precise(globeRadius)} 0 1 0 ${precise(centerX - globeRadius)} ${precise(centerY)}`;
 
   return [
-    ...projectedEdges.map(({ path }) => path),
+    ...renderItems.map(({ path }) => path),
     { d: outline, colorIndex: 0, opacity: 0.86, weight: 1.08 },
   ];
 }
@@ -1044,8 +1156,11 @@ function svgMarkup(settings: Settings, paths: RenderPath[]) {
   const linecap = settings.mode === "hatch" ? "butt" : "round";
   const pathMarkup = paths
     .map((path) => {
-      const stroke = pathStroke(settings, path, colors);
-      return `<path d="${path.d}" fill="none" stroke="${stroke}" stroke-width="${settings.lineWeight * (path.weight ?? 1)}" stroke-opacity="${settings.opacity * (path.opacity ?? 1)}" stroke-linecap="${linecap}" stroke-linejoin="round"/>`;
+      const color = pathStroke(settings, path, colors);
+      const fill = path.fill ? color : "none";
+      const stroke = (path.stroke ?? !path.fill) ? color : "none";
+      const elementOpacity = settings.opacity * (path.opacity ?? 1);
+      return `<path d="${path.d}" fill="${fill}" fill-opacity="${elementOpacity}" stroke="${stroke}" stroke-width="${settings.lineWeight * (path.weight ?? 1)}" stroke-opacity="${elementOpacity}" stroke-linecap="${linecap}" stroke-linejoin="round"/>`;
     })
     .join("");
   const paper = settings.transparent
@@ -1155,6 +1270,12 @@ function randomizedSettings(current: Settings): Settings {
     globeTilt: Math.floor(-60 + Math.random() * 121),
     globeRoll: Math.floor(-30 + Math.random() * 61),
     globeBackOpacity: fixed(0.03 + Math.random() * 0.25),
+    globeNodeAmount: Math.floor(Math.random() * 101),
+    globeNodeSize: fixed(2 + Math.random() * 8),
+    globeNodeStyle: Math.random() > 0.5 ? "filled" : "stroked",
+    globeNodeShape: ["circle", "triangle", "diamond"][
+      Math.floor(Math.random() * 3)
+    ] as GlobeNodeShape,
     lineWeight:
       current.mode === "hatch"
         ? fixed(Math.round((0.35 + Math.random() * 5.65) * 20) / 20)
@@ -1192,6 +1313,11 @@ export default function Home() {
     2400 * (canvasSizes[settings.canvasRatio].width / CANVAS_HEIGHT),
   );
   const hatchThicknessLimit = safeHatchThickness(settings);
+  const globeEdgeCount = 30 * 4 ** settings.globeDetail;
+  const globeVertexCount = 10 * 4 ** settings.globeDetail + 2;
+  const globeVisibleNodeCount = Math.round(
+    globeVertexCount * (settings.globeNodeAmount / 100),
+  );
 
   const flash = (message: string) => {
     setNotice(message);
@@ -1331,7 +1457,7 @@ export default function Home() {
         : settings.mode === "hatch"
           ? `${paths.length.toLocaleString()} PARALLEL WAVES`
           : settings.mode === "globe"
-            ? `${Math.max(0, paths.length - 1).toLocaleString()} GEODESIC EDGES`
+            ? `${globeEdgeCount.toLocaleString()} EDGES · ${globeVisibleNodeCount.toLocaleString()} NODES`
         : `${settings.bands} ${settings.bands === 1 ? "STRAND" : "STRANDS"}`;
   const formula =
     settings.mode === "ribbon"
@@ -1353,7 +1479,7 @@ export default function Home() {
           : settings.mode === "globe"
             ? {
                 symbol: "p̂",
-                expression: "normalize(subdivide(icosahedron)) → project(x, y)",
+                expression: "project(shared icosphere vertices) → edges + nodes",
               }
         : {
             symbol: "r(t)",
@@ -1750,7 +1876,7 @@ export default function Home() {
                   />
                   <div className="math-note is-good">
                     <span>Orthographic sphere</span>
-                    <small>Great-circle edges with depth-layered visibility</small>
+                    <small>Shared vertices with depth-layered visibility</small>
                   </div>
                 </>
               ) : (
@@ -1815,6 +1941,92 @@ export default function Home() {
               )}
             </div>
           </details>
+
+          {settings.mode === "globe" && (
+            <details className="control-section" open>
+              <summary>
+                <span>03 / Nodes</span>
+                <span className="summary-mark" aria-hidden="true">
+                  +
+                </span>
+              </summary>
+              <div className="control-stack">
+                <RangeControl
+                  label="Node amount"
+                  value={settings.globeNodeAmount}
+                  min={0}
+                  max={100}
+                  unit="%"
+                  onChange={(value) => update("globeNodeAmount", value)}
+                />
+                <RangeControl
+                  label="Node size"
+                  value={settings.globeNodeSize}
+                  min={1}
+                  max={18}
+                  step={0.25}
+                  unit=" px"
+                  onChange={(value) => update("globeNodeSize", value)}
+                />
+                <div className="segmented" aria-label="Node treatment">
+                  <button
+                    type="button"
+                    className={
+                      settings.globeNodeStyle === "filled" ? "is-active" : ""
+                    }
+                    onClick={() => update("globeNodeStyle", "filled")}
+                  >
+                    Filled
+                  </button>
+                  <button
+                    type="button"
+                    className={
+                      settings.globeNodeStyle === "stroked" ? "is-active" : ""
+                    }
+                    onClick={() => update("globeNodeStyle", "stroked")}
+                  >
+                    Stroked
+                  </button>
+                </div>
+                <div className="segmented three-up" aria-label="Node shape">
+                  <button
+                    type="button"
+                    className={
+                      settings.globeNodeShape === "circle" ? "is-active" : ""
+                    }
+                    onClick={() => update("globeNodeShape", "circle")}
+                  >
+                    Circle
+                  </button>
+                  <button
+                    type="button"
+                    className={
+                      settings.globeNodeShape === "triangle" ? "is-active" : ""
+                    }
+                    onClick={() => update("globeNodeShape", "triangle")}
+                  >
+                    Rounded triangle
+                  </button>
+                  <button
+                    type="button"
+                    className={
+                      settings.globeNodeShape === "diamond" ? "is-active" : ""
+                    }
+                    onClick={() => update("globeNodeShape", "diamond")}
+                  >
+                    Rounded diamond
+                  </button>
+                </div>
+                <div className="math-note is-good">
+                  <span>{globeVisibleNodeCount} marked vertices</span>
+                  <small>
+                    Selected deterministically from {globeVertexCount} shared
+                    corners
+                  </small>
+                </div>
+              </div>
+            </details>
+          )}
 
           {settings.mode !== "hatch" && settings.mode !== "globe" && (
             <details className="control-section">
@@ -1962,19 +2174,21 @@ export default function Home() {
                 step={0.01}
                 onChange={(value) => update("opacity", value)}
               />
-              <label className="select-control">
-                <span>Vector detail</span>
-                <select
-                  value={settings.quality}
-                  onChange={(event) =>
-                    update("quality", Number(event.target.value))
-                  }
-                >
-                  <option value={4800}>Draft · 4.8k points</option>
-                  <option value={9000}>Fine · 9k points</option>
-                  <option value={15000}>Press · 15k points</option>
-                </select>
-              </label>
+              {settings.mode !== "globe" && (
+                <label className="select-control">
+                  <span>Vector detail</span>
+                  <select
+                    value={settings.quality}
+                    onChange={(event) =>
+                      update("quality", Number(event.target.value))
+                    }
+                  >
+                    <option value={4800}>Draft · 4.8k points</option>
+                    <option value={9000}>Fine · 9k points</option>
+                    <option value={15000}>Press · 15k points</option>
+                  </select>
+                </label>
+              )}
             </div>
           </details>
         </aside>
@@ -2054,7 +2268,7 @@ export default function Home() {
                     : settings.mode === "hatch"
                       ? `wave hatch with ${settings.hatchHeight} pixel height and ${settings.hatchLength} pixel wavelength`
                       : settings.mode === "globe"
-                        ? `geodesic globe with subdivision detail ${settings.globeDetail}`
+                        ? `geodesic globe with subdivision detail ${settings.globeDetail} and ${globeVisibleNodeCount} marked nodes`
                     : `${settings.mode} guilloché pattern with ${settings.nodes} nodes and divisor ${settings.divisor}`
                 }
               >
@@ -2090,24 +2304,28 @@ export default function Home() {
                   <rect width="100%" height="100%" fill={renderSettings.paper} />
                 )}
                 <g clipPath="url(#preview-plate)">
-                  {paths.map((path, index) => (
-                    <path
-                      key={`${index}-${renderSettings.mode}`}
-                      d={path.d}
-                      fill="none"
-                      stroke={pathStroke(renderSettings, path, colors)}
-                      strokeWidth={
-                        renderSettings.lineWeight * (path.weight ?? 1)
-                      }
-                      strokeOpacity={
-                        renderSettings.opacity * (path.opacity ?? 1)
-                      }
-                      strokeLinecap={
-                        renderSettings.mode === "hatch" ? "butt" : "round"
-                      }
-                      strokeLinejoin="round"
-                    />
-                  ))}
+                  {paths.map((path, index) => {
+                    const color = pathStroke(renderSettings, path, colors);
+                    const elementOpacity =
+                      renderSettings.opacity * (path.opacity ?? 1);
+                    return (
+                      <path
+                        key={`${index}-${renderSettings.mode}`}
+                        d={path.d}
+                        fill={path.fill ? color : "none"}
+                        fillOpacity={elementOpacity}
+                        stroke={(path.stroke ?? !path.fill) ? color : "none"}
+                        strokeWidth={
+                          renderSettings.lineWeight * (path.weight ?? 1)
+                        }
+                        strokeOpacity={elementOpacity}
+                        strokeLinecap={
+                          renderSettings.mode === "hatch" ? "butt" : "round"
+                        }
+                        strokeLinejoin="round"
+                      />
+                    );
+                  })}
                 </g>
               </svg>
             </div>

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 async function render() {
@@ -45,4 +46,17 @@ test("renders the guilloche studio", async () => {
   assert.match(html, /16:9/);
   assert.match(html, /Background/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/);
+});
+
+test("includes deterministic globe intersection controls", async () => {
+  const source = await readFile(
+    new URL("../app/page.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /Node amount/);
+  assert.match(source, /Node treatment/);
+  assert.match(source, /Rounded triangle/);
+  assert.match(source, /Rounded diamond/);
+  assert.match(source, /Selected deterministically/);
 });
