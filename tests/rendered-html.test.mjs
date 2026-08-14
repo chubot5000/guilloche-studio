@@ -58,6 +58,9 @@ test("includes deterministic globe intersection controls", async () => {
 
   assert.match(source, /Node amount/);
   assert.match(source, /Node treatment/);
+  assert.match(source, /Fill \+ stroke/);
+  assert.match(source, /Node fill color/);
+  assert.match(source, /Node stroke color/);
   assert.match(source, /Rounded triangle/);
   assert.match(source, /Rounded diamond/);
   assert.match(source, /Selected deterministically/);
@@ -72,4 +75,7 @@ test("exports globe paths with exactly front and rear opacity groups", async () 
   assert.match(source, /depth >= 0 \? 1 : globeBackOpacity/);
   assert.match(source, /settings\.mode === "globe"\s*\? localOpacity/);
   assert.match(source, /opacity: 1, weight: 1\.08/);
+  assert.match(source, /fill: true/);
+  assert.match(source, /fillColor: globeNodeFill/);
+  assert.match(source, /strokeColor: globeNodeStroke/);
 });

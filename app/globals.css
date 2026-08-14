@@ -537,6 +537,10 @@ input[type="range"]::-moz-range-thumb {
   grid-template-columns: 1fr 1fr;
 }
 
+.color-row.is-single {
+  grid-template-columns: 1fr;
+}
+
 .color-row > label {
   background: var(--surface);
   border: 1px solid var(--line);

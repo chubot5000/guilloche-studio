@@ -55,6 +55,8 @@ type Settings = {
   globeNodeSize: number;
   globeNodeStyle: GlobeNodeStyle;
   globeNodeShape: GlobeNodeShape;
+  globeNodeFill: string;
+  globeNodeStroke: string;
   canvasRatio: CanvasRatio;
   lineWeight: number;
   opacity: number;
@@ -79,6 +81,8 @@ type RenderPath = {
   weight?: number;
   fill?: boolean;
   stroke?: boolean;
+  fillColor?: string;
+  strokeColor?: string;
 };
 
 type Vector3 = { x: number; y: number; z: number };
@@ -157,6 +161,8 @@ const baseSettings: Settings = {
   globeNodeSize: 4,
   globeNodeStyle: "filled",
   globeNodeShape: "circle",
+  globeNodeFill: "#173A59",
+  globeNodeStroke: "#C08C56",
   canvasRatio: "1:1",
   lineWeight: 0.7,
   opacity: 0.84,
@@ -306,6 +312,8 @@ const presets: Preset[] = [
       globeNodeSize: 2.5,
       globeNodeStyle: "stroked",
       globeNodeShape: "diamond",
+      globeNodeFill: "#F4F0E7",
+      globeNodeStroke: "#6D716E",
       lineWeight: 0.52,
       opacity: 0.86,
       paper: "#F4F0E7",
@@ -328,6 +336,8 @@ const presets: Preset[] = [
       globeNodeSize: 4.5,
       globeNodeStyle: "filled",
       globeNodeShape: "circle",
+      globeNodeFill: "#765F52",
+      globeNodeStroke: "#C69A63",
       lineWeight: 0.7,
       opacity: 0.9,
       paper: "#F8F4EA",
@@ -967,6 +977,8 @@ function globePaths(settings: Settings): RenderPath[] {
     globeNodeSize,
     globeNodeStyle,
     globeNodeShape,
+    globeNodeFill,
+    globeNodeStroke,
   } = settings;
   const { width, height } = canvasSize(settings);
   const centerX = width / 2;
@@ -1109,8 +1121,10 @@ function globePaths(settings: Settings): RenderPath[] {
         colorIndex: vertexIndex,
         opacity: sideOpacity(point.z),
         weight: 1,
-        fill: globeNodeStyle === "filled",
+        fill: true,
         stroke: globeNodeStyle === "stroked",
+        fillColor: globeNodeFill,
+        strokeColor: globeNodeStroke,
       },
     });
   }
@@ -1144,6 +1158,18 @@ function pathStroke(
     : colors[path.colorIndex % colors.length];
 }
 
+function pathFill(settings: Settings, path: RenderPath, colors: string[]) {
+  return path.fill
+    ? path.fillColor ?? pathStroke(settings, path, colors)
+    : "none";
+}
+
+function pathOutline(settings: Settings, path: RenderPath, colors: string[]) {
+  return (path.stroke ?? !path.fill)
+    ? path.strokeColor ?? pathStroke(settings, path, colors)
+    : "none";
+}
+
 function pathOpacity(settings: Settings, path: RenderPath) {
   const localOpacity = path.opacity ?? 1;
   return settings.mode === "globe"
@@ -1160,9 +1186,8 @@ function svgMarkup(settings: Settings, paths: RenderPath[]) {
   const linecap = settings.mode === "hatch" ? "butt" : "round";
   const pathMarkup = paths
     .map((path) => {
-      const color = pathStroke(settings, path, colors);
-      const fill = path.fill ? color : "none";
-      const stroke = (path.stroke ?? !path.fill) ? color : "none";
+      const fill = pathFill(settings, path, colors);
+      const stroke = pathOutline(settings, path, colors);
       const elementOpacity = pathOpacity(settings, path);
       return `<path d="${path.d}" fill="${fill}" fill-opacity="${elementOpacity}" stroke="${stroke}" stroke-width="${settings.lineWeight * (path.weight ?? 1)}" stroke-opacity="${elementOpacity}" stroke-linecap="${linecap}" stroke-linejoin="round"/>`;
     })
@@ -2004,8 +2029,44 @@ export default function Home() {
                     }
                     onClick={() => update("globeNodeStyle", "stroked")}
                   >
-                    Stroked
+                    Fill + stroke
                   </button>
+                </div>
+                <div
+                  className={`color-row ${
+                    settings.globeNodeStyle === "filled" ? "is-single" : ""
+                  }`}
+                >
+                  <label>
+                    <span>Node fill</span>
+                    <span className="color-field">
+                      <input
+                        type="color"
+                        value={settings.globeNodeFill}
+                        aria-label="Node fill color"
+                        onChange={(event) =>
+                          update("globeNodeFill", event.target.value)
+                        }
+                      />
+                      <code>{settings.globeNodeFill}</code>
+                    </span>
+                  </label>
+                  {settings.globeNodeStyle === "stroked" && (
+                    <label>
+                      <span>Node stroke</span>
+                      <span className="color-field">
+                        <input
+                          type="color"
+                          value={settings.globeNodeStroke}
+                          aria-label="Node stroke color"
+                          onChange={(event) =>
+                            update("globeNodeStroke", event.target.value)
+                          }
+                        />
+                        <code>{settings.globeNodeStroke}</code>
+                      </span>
+                    </label>
+                  )}
                 </div>
                 <div className="segmented three-up" aria-label="Node shape">
                   <button
@@ -2303,15 +2364,14 @@ export default function Home() {
                 )}
                 <g clipPath="url(#preview-plate)">
                   {paths.map((path, index) => {
-                    const color = pathStroke(renderSettings, path, colors);
                     const elementOpacity = pathOpacity(renderSettings, path);
                     return (
                       <path
                         key={`${index}-${renderSettings.mode}`}
                         d={path.d}
-                        fill={path.fill ? color : "none"}
+                        fill={pathFill(renderSettings, path, colors)}
                         fillOpacity={elementOpacity}
-                        stroke={(path.stroke ?? !path.fill) ? color : "none"}
+                        stroke={pathOutline(renderSettings, path, colors)}
                         strokeWidth={
                           renderSettings.lineWeight * (path.weight ?? 1)
                         }
