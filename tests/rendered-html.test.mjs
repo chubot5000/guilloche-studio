@@ -29,9 +29,11 @@ test("renders the guilloche studio", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>Rouletté — Guilloché Pattern Studio<\/title>/i);
-  assert.match(html, /Draw in rings, ribbons, fields, waves, and spheres/);
-  assert.match(html, /Export vector/);
+  assert.match(html, /<title>Rouletté \| Guilloché Pattern Studio<\/title>/i);
+  assert.match(html, /Build precision patterns/);
+  assert.match(html, /Export SVG/);
+  assert.match(html, /Pattern construction/);
+  assert.match(html, /Parameters/);
   assert.match(html, /Starting plate/);
   assert.match(html, /Live plate/);
   assert.match(html, /Ribbon \/ tube/);

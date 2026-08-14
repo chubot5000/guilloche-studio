@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import "./globals.css";
 
-const title = "Rouletté — Guilloché Pattern Studio";
+const title = "Rouletté | Guilloché Pattern Studio";
 const description =
   "Design adjustable guilloché medallions, woven ribbons, tubes, background fields, precision sine-wave hatching, and geodesic globes, then export press-ready vector SVGs.";
 
@@ -16,7 +16,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const origin = host
     ? `${protocol}://${host}`
     : "https://roulette-guilloche-studio.lilchu.chatgpt.site";
-  const socialImage = new URL("/og.png", origin).toString();
+  const socialImage = new URL("/og-v2.png", origin).toString();
 
   return {
     title,

@@ -1307,6 +1307,9 @@ export default function Home() {
   const activePresets = presets.filter(
     (preset) => preset.settings.mode === settings.mode,
   );
+  const activeModeOption = modeOptions.find(
+    (option) => option.mode === settings.mode,
+  );
   const { width: canvasWidth, height: canvasHeight } =
     canvasSize(renderSettings);
   const pngWidth = Math.round(
@@ -1494,33 +1497,40 @@ export default function Home() {
             R
           </span>
           <span>
-            <strong>ROULETTÉ</strong>
-            <small>GUILLOCHÉ STUDIO</small>
+            <strong>Rouletté</strong>
+            <small>Guilloché studio</small>
           </span>
         </a>
-        <p className="edition">
-          EDITION 04 / CURVES, RIBBONS, FIELDS, WAVES & SPHERES
-        </p>
+        <div className="topbar-context" aria-live="polite">
+          <span>{activeModeOption?.label}</span>
+          <strong>
+            {activePreset === "Custom" ? "Custom study" : activePreset}
+          </strong>
+        </div>
+        <div className="topbar-actions">
+          <button className="secondary-button" type="button" onClick={copySvg}>
+            Copy SVG
+          </button>
+          <button className="primary-button" type="button" onClick={downloadSvg}>
+            Export SVG <span aria-hidden="true">↓</span>
+          </button>
+        </div>
       </header>
 
       <div className="studio-grid" id="top">
-        <aside className="controls-panel" aria-label="Pattern controls">
+        <nav className="construction-panel" aria-label="Pattern construction">
           <section className="intro">
-            <p className="eyebrow">Pattern workshop</p>
-            <h1>Draw in rings, ribbons, fields, waves, and spheres.</h1>
-            <p>
-              Wrap the same mathematical weave around a medallion, along a
-              flowing tube, across a background, into a precision sine hatch,
-              or over a geodesic globe.
-            </p>
+            <span className="section-kicker">Vector pattern instrument</span>
+            <h1>Build precision patterns.</h1>
+            <p>Shape mathematically exact linework and export clean vectors.</p>
           </section>
 
-          <section className="control-section mode-section">
+          <section className="rail-section mode-section">
             <div className="section-heading">
               <h2>Construction</h2>
             </div>
             <div className="mode-grid">
-              {modeOptions.map((option, index) => (
+              {modeOptions.map((option) => (
                 <button
                   type="button"
                   key={option.mode}
@@ -1530,7 +1540,6 @@ export default function Home() {
                   onClick={() => chooseMode(option.mode)}
                   aria-pressed={settings.mode === option.mode}
                 >
-                  <span>0{index + 1}</span>
                   <strong>{option.label}</strong>
                   <small>{option.note}</small>
                 </button>
@@ -1538,15 +1547,15 @@ export default function Home() {
             </div>
           </section>
 
-          <section className="control-section preset-section">
+          <section className="rail-section preset-section">
             <div className="section-heading">
               <h2>Starting plate</h2>
               <button className="text-button" type="button" onClick={randomize}>
-                Surprise me <span aria-hidden="true">↗</span>
+                Randomize
               </button>
             </div>
             <div className="preset-grid">
-              {activePresets.map((preset, index) => (
+              {activePresets.map((preset) => (
                 <button
                   type="button"
                   key={preset.name}
@@ -1555,17 +1564,23 @@ export default function Home() {
                   }`}
                   onClick={() => choosePreset(preset)}
                 >
-                  <span className="preset-number">0{index + 1}</span>
                   <strong>{preset.name}</strong>
                   <small>{preset.note}</small>
                 </button>
               ))}
             </div>
           </section>
+        </nav>
+
+        <aside className="controls-panel" aria-label="Pattern controls">
+          <header className="inspector-header">
+            <span>Parameters</span>
+            <h2>{activeModeOption?.label}</h2>
+          </header>
 
           <details className="control-section" open>
             <summary>
-              <span>01 / Structure</span>
+              <span>Structure</span>
               <span className="summary-mark" aria-hidden="true">
                 +
               </span>
@@ -1810,7 +1825,7 @@ export default function Home() {
 
           <details className="control-section" open>
             <summary>
-              <span>02 / {settings.mode === "globe" ? "Projection" : "Weave"}</span>
+              <span>{settings.mode === "globe" ? "Projection" : "Weave"}</span>
               <span className="summary-mark" aria-hidden="true">
                 +
               </span>
@@ -1945,7 +1960,7 @@ export default function Home() {
           {settings.mode === "globe" && (
             <details className="control-section" open>
               <summary>
-                <span>03 / Nodes</span>
+                <span>Nodes</span>
                 <span className="summary-mark" aria-hidden="true">
                   +
                 </span>
@@ -2032,7 +2047,6 @@ export default function Home() {
             <details className="control-section">
               <summary>
                 <span>
-                  03 /{" "}
                   {settings.mode === "ribbon"
                     ? "Edge texture"
                     : settings.mode === "field"
@@ -2078,7 +2092,7 @@ export default function Home() {
 
           <details className="control-section">
             <summary>
-              <span>04 / Finish</span>
+              <span>Finish</span>
               <span className="summary-mark" aria-hidden="true">
                 +
               </span>
@@ -2195,49 +2209,27 @@ export default function Home() {
 
         <section className="preview-panel" aria-label="Guilloché preview">
           <div className="preview-toolbar">
-            <div>
-              <p className="eyebrow">
-                Live plate / {settings.mode}
-              </p>
+            <div className="preview-title">
+              <span>Live plate</span>
               <h2>
-                {activePreset === "Custom" ? "Untitled study" : activePreset}
+                {activePreset === "Custom" ? "Custom study" : activePreset}
               </h2>
             </div>
-            <div className="preview-tools">
-              <div className="canvas-control">
-                <span>Canvas</span>
-                <div className="ratio-buttons" aria-label="Canvas aspect ratio">
-                  {(Object.keys(canvasSizes) as CanvasRatio[]).map((ratio) => (
-                    <button
-                      type="button"
-                      key={ratio}
-                      className={
-                        settings.canvasRatio === ratio ? "is-active" : ""
-                      }
-                      aria-pressed={settings.canvasRatio === ratio}
-                      title={canvasSizes[ratio].label}
-                      onClick={() => chooseCanvasRatio(ratio)}
-                    >
-                      {ratio}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="toolbar-actions">
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={copySvg}
-                >
-                  Copy SVG
-                </button>
-                <button
-                  className="primary-button"
-                  type="button"
-                  onClick={downloadSvg}
-                >
-                  Export vector <span aria-hidden="true">↓</span>
-                </button>
+            <div className="canvas-control">
+              <span>Canvas</span>
+              <div className="ratio-buttons" aria-label="Canvas aspect ratio">
+                {(Object.keys(canvasSizes) as CanvasRatio[]).map((ratio) => (
+                  <button
+                    type="button"
+                    key={ratio}
+                    className={settings.canvasRatio === ratio ? "is-active" : ""}
+                    aria-pressed={settings.canvasRatio === ratio}
+                    title={canvasSizes[ratio].label}
+                    onClick={() => chooseCanvasRatio(ratio)}
+                  >
+                    {ratio}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
