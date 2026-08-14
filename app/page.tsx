@@ -1072,27 +1072,18 @@ function globePaths(settings: Settings): RenderPath[] {
   });
   const sideOpacity = (depth: number) =>
     depth >= 0 ? 1 : globeBackOpacity;
-  const renderItems: Array<{
+  const globeLayer = {
+    rearEdge: 0,
+    rearNode: 1,
+    frontEdge: 2,
+    outline: 3,
+    frontNode: 4,
+  } as const;
+  type GlobeRenderItem = {
     depth: number;
     layer: number;
     path: RenderPath;
-  }> = Array.from(edgeMap.values()).map(
-    ([startIndex, endIndex], edgeIndex) => {
-      const start = projectedVertices[startIndex];
-      const end = projectedVertices[endIndex];
-      const depth = (start.z + end.z) / 2;
-      return {
-        depth,
-        layer: 0,
-        path: {
-          d: `M${precise(start.x)} ${precise(start.y)}L${precise(end.x)} ${precise(end.y)}`,
-          colorIndex: edgeIndex,
-          opacity: sideOpacity(depth),
-          weight: 1,
-        },
-      };
-    },
-  );
+  };
 
   const nodeCount = Math.round(
     projectedVertices.length * (globeNodeAmount / 100),
@@ -1105,12 +1096,83 @@ function globePaths(settings: Settings): RenderPath[] {
     .sort((left, right) => left.order - right.order)
     .slice(0, nodeCount)
     .map(({ index }) => index);
+  const selectedNodeSet = new Set(selectedNodeIndices);
+  const nodeClearance = globeNodeSize / 2 + settings.lineWeight / 2;
+
+  const edgeRenderItem = (
+    start: Vector3,
+    end: Vector3,
+    colorIndex: number,
+  ): GlobeRenderItem => {
+    const depth = (start.z + end.z) / 2;
+    return {
+      depth,
+      layer: depth >= 0 ? globeLayer.frontEdge : globeLayer.rearEdge,
+      path: {
+        d: `M${precise(start.x)} ${precise(start.y)}L${precise(end.x)} ${precise(end.y)}`,
+        colorIndex,
+        opacity: sideOpacity(depth),
+        weight: 1,
+      },
+    };
+  };
+
+  const edgeItems = Array.from(edgeMap.values()).flatMap(
+    ([startIndex, endIndex], edgeIndex) => {
+      const start = projectedVertices[startIndex];
+      const end = projectedVertices[endIndex];
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+      const dz = end.z - start.z;
+      const projectedLength = Math.hypot(dx, dy);
+      let startInset = selectedNodeSet.has(startIndex)
+        ? Math.min(nodeClearance / projectedLength, 0.42)
+        : 0;
+      let endInset = selectedNodeSet.has(endIndex)
+        ? Math.min(nodeClearance / projectedLength, 0.42)
+        : 0;
+      const insetTotal = startInset + endInset;
+      if (insetTotal > 0.84) {
+        const insetScale = 0.84 / insetTotal;
+        startInset *= insetScale;
+        endInset *= insetScale;
+      }
+      const trimmedStart = {
+        x: start.x + dx * startInset,
+        y: start.y + dy * startInset,
+        z: start.z + dz * startInset,
+      };
+      const trimmedEnd = {
+        x: end.x - dx * endInset,
+        y: end.y - dy * endInset,
+        z: end.z - dz * endInset,
+      };
+
+      if (trimmedStart.z * trimmedEnd.z < 0) {
+        const horizonRatio =
+          -trimmedStart.z / (trimmedEnd.z - trimmedStart.z);
+        const horizon = {
+          x: trimmedStart.x + (trimmedEnd.x - trimmedStart.x) * horizonRatio,
+          y: trimmedStart.y + (trimmedEnd.y - trimmedStart.y) * horizonRatio,
+          z: 0,
+        };
+        return [
+          edgeRenderItem(trimmedStart, horizon, edgeIndex),
+          edgeRenderItem(horizon, trimmedEnd, edgeIndex),
+        ];
+      }
+
+      return [edgeRenderItem(trimmedStart, trimmedEnd, edgeIndex)];
+    },
+  );
+  const renderItems: GlobeRenderItem[] = [...edgeItems];
 
   for (const vertexIndex of selectedNodeIndices) {
     const point = projectedVertices[vertexIndex];
     renderItems.push({
       depth: point.z,
-      layer: 1,
+      layer:
+        point.z >= 0 ? globeLayer.frontNode : globeLayer.rearNode,
       path: {
         d: globeNodePath(
           point.x,
@@ -1129,15 +1191,17 @@ function globePaths(settings: Settings): RenderPath[] {
     });
   }
 
-  renderItems.sort(
-    (left, right) => left.depth - right.depth || left.layer - right.layer,
-  );
   const outline = `M${precise(centerX - globeRadius)} ${precise(centerY)}A${precise(globeRadius)} ${precise(globeRadius)} 0 1 0 ${precise(centerX + globeRadius)} ${precise(centerY)}A${precise(globeRadius)} ${precise(globeRadius)} 0 1 0 ${precise(centerX - globeRadius)} ${precise(centerY)}`;
+  renderItems.push({
+    depth: 0,
+    layer: globeLayer.outline,
+    path: { d: outline, colorIndex: 0, opacity: 1, weight: 1.08 },
+  });
+  renderItems.sort(
+    (left, right) => left.layer - right.layer || left.depth - right.depth,
+  );
 
-  return [
-    ...renderItems.map(({ path }) => path),
-    { d: outline, colorIndex: 0, opacity: 1, weight: 1.08 },
-  ];
+  return renderItems.map(({ path }) => path);
 }
 
 function generatePaths(settings: Settings) {

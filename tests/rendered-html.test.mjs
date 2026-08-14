@@ -79,3 +79,18 @@ test("exports globe paths with exactly front and rear opacity groups", async () 
   assert.match(source, /fillColor: globeNodeFill/);
   assert.match(source, /strokeColor: globeNodeStroke/);
 });
+
+test("keeps globe nodes above their hemisphere mesh without line bleed", async () => {
+  const source = await readFile(
+    new URL("../app/page.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /rearEdge: 0[\s\S]*rearNode: 1/);
+  assert.match(source, /frontEdge: 2[\s\S]*outline: 3[\s\S]*frontNode: 4/);
+  assert.match(source, /nodeClearance = globeNodeSize \/ 2 \+ settings\.lineWeight \/ 2/);
+  assert.match(source, /selectedNodeSet\.has\(startIndex\)/);
+  assert.match(source, /selectedNodeSet\.has\(endIndex\)/);
+  assert.match(source, /horizonRatio/);
+  assert.match(source, /left\.layer - right\.layer \|\| left\.depth - right\.depth/);
+});
