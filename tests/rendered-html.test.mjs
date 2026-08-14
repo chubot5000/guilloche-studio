@@ -62,3 +62,14 @@ test("includes deterministic globe intersection controls", async () => {
   assert.match(source, /Rounded diamond/);
   assert.match(source, /Selected deterministically/);
 });
+
+test("exports globe paths with exactly front and rear opacity groups", async () => {
+  const source = await readFile(
+    new URL("../app/page.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /depth >= 0 \? 1 : globeBackOpacity/);
+  assert.match(source, /settings\.mode === "globe"\s*\? localOpacity/);
+  assert.match(source, /opacity: 1, weight: 1\.08/);
+});

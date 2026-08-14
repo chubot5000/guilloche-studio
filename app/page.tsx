@@ -1058,11 +1058,8 @@ function globePaths(settings: Settings): RenderPath[] {
       z: rotated.z,
     };
   });
-  const visibilityAt = (depth: number) => {
-    const frontness = Math.max(0, Math.min(1, (depth + 0.18) / 0.48));
-    const smoothFrontness = frontness * frontness * (3 - 2 * frontness);
-    return globeBackOpacity + (1 - globeBackOpacity) * smoothFrontness;
-  };
+  const sideOpacity = (depth: number) =>
+    depth >= 0 ? 1 : globeBackOpacity;
   const renderItems: Array<{
     depth: number;
     layer: number;
@@ -1078,7 +1075,7 @@ function globePaths(settings: Settings): RenderPath[] {
         path: {
           d: `M${precise(start.x)} ${precise(start.y)}L${precise(end.x)} ${precise(end.y)}`,
           colorIndex: edgeIndex,
-          opacity: visibilityAt(depth),
+          opacity: sideOpacity(depth),
           weight: 1,
         },
       };
@@ -1110,7 +1107,7 @@ function globePaths(settings: Settings): RenderPath[] {
           globeNodeShape,
         ),
         colorIndex: vertexIndex,
-        opacity: visibilityAt(point.z),
+        opacity: sideOpacity(point.z),
         weight: 1,
         fill: globeNodeStyle === "filled",
         stroke: globeNodeStyle === "stroked",
@@ -1125,7 +1122,7 @@ function globePaths(settings: Settings): RenderPath[] {
 
   return [
     ...renderItems.map(({ path }) => path),
-    { d: outline, colorIndex: 0, opacity: 0.86, weight: 1.08 },
+    { d: outline, colorIndex: 0, opacity: 1, weight: 1.08 },
   ];
 }
 
@@ -1147,6 +1144,13 @@ function pathStroke(
     : colors[path.colorIndex % colors.length];
 }
 
+function pathOpacity(settings: Settings, path: RenderPath) {
+  const localOpacity = path.opacity ?? 1;
+  return settings.mode === "globe"
+    ? localOpacity
+    : settings.opacity * localOpacity;
+}
+
 function svgMarkup(settings: Settings, paths: RenderPath[]) {
   const colors = palettes[settings.palette] ?? palettes.Treasury;
   const { width, height } = canvasSize(settings);
@@ -1159,7 +1163,7 @@ function svgMarkup(settings: Settings, paths: RenderPath[]) {
       const color = pathStroke(settings, path, colors);
       const fill = path.fill ? color : "none";
       const stroke = (path.stroke ?? !path.fill) ? color : "none";
-      const elementOpacity = settings.opacity * (path.opacity ?? 1);
+      const elementOpacity = pathOpacity(settings, path);
       return `<path d="${path.d}" fill="${fill}" fill-opacity="${elementOpacity}" stroke="${stroke}" stroke-width="${settings.lineWeight * (path.weight ?? 1)}" stroke-opacity="${elementOpacity}" stroke-linecap="${linecap}" stroke-linejoin="round"/>`;
     })
     .join("");
@@ -1882,7 +1886,7 @@ export default function Home() {
                     onChange={(value) => update("globeRoll", value)}
                   />
                   <RangeControl
-                    label="Rear mesh visibility"
+                    label="Rear mesh opacity"
                     value={settings.globeBackOpacity}
                     min={0}
                     max={0.6}
@@ -1890,8 +1894,8 @@ export default function Home() {
                     onChange={(value) => update("globeBackOpacity", value)}
                   />
                   <div className="math-note is-good">
-                    <span>Orthographic sphere</span>
-                    <small>Shared vertices with depth-layered visibility</small>
+                    <span>Two opacity groups</span>
+                    <small>Front is solid; rear uses one shared opacity</small>
                   </div>
                 </>
               ) : (
@@ -2180,14 +2184,16 @@ export default function Home() {
                   onChange={(value) => update("lineWeight", value)}
                 />
               )}
-              <RangeControl
-                label="Ink opacity"
-                value={settings.opacity}
-                min={0.2}
-                max={1}
-                step={0.01}
-                onChange={(value) => update("opacity", value)}
-              />
+              {settings.mode !== "globe" && (
+                <RangeControl
+                  label="Ink opacity"
+                  value={settings.opacity}
+                  min={0.2}
+                  max={1}
+                  step={0.01}
+                  onChange={(value) => update("opacity", value)}
+                />
+              )}
               {settings.mode !== "globe" && (
                 <label className="select-control">
                   <span>Vector detail</span>
@@ -2298,8 +2304,7 @@ export default function Home() {
                 <g clipPath="url(#preview-plate)">
                   {paths.map((path, index) => {
                     const color = pathStroke(renderSettings, path, colors);
-                    const elementOpacity =
-                      renderSettings.opacity * (path.opacity ?? 1);
+                    const elementOpacity = pathOpacity(renderSettings, path);
                     return (
                       <path
                         key={`${index}-${renderSettings.mode}`}
