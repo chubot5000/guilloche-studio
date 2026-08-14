@@ -230,6 +230,10 @@ input:focus-visible {
   border-color: #867e72;
 }
 
+.mode-card:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
 .mode-card.is-active {
   background: #e9e2d6;
   border-color: var(--ink);

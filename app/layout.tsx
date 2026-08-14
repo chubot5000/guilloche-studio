@@ -4,7 +4,7 @@ import "./globals.css";
 
 const title = "Rouletté — Guilloché Pattern Studio";
 const description =
-  "Design adjustable guilloché medallions, woven ribbons, tubes, background fields, and precision sine-wave hatching, then export press-ready vector SVGs.";
+  "Design adjustable guilloché medallions, woven ribbons, tubes, background fields, precision sine-wave hatching, and geodesic globes, then export press-ready vector SVGs.";
 
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();

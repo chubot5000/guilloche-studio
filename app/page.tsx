@@ -9,7 +9,7 @@ import {
 } from "react";
 
 type ColorMode = "single" | "layered";
-type PatternMode = "medallion" | "ribbon" | "field" | "hatch";
+type PatternMode = "medallion" | "ribbon" | "field" | "hatch" | "globe";
 type TubeStyle = "ribbon" | "tube";
 type CanvasRatio = "1:1" | "3:2" | "16:9";
 
@@ -43,6 +43,12 @@ type Settings = {
   hatchLength: number;
   hatchSpacing: number;
   hatchMargin: number;
+  globeDetail: number;
+  globeRadius: number;
+  globeYaw: number;
+  globeTilt: number;
+  globeRoll: number;
+  globeBackOpacity: number;
   canvasRatio: CanvasRatio;
   lineWeight: number;
   opacity: number;
@@ -66,6 +72,8 @@ type RenderPath = {
   opacity?: number;
   weight?: number;
 };
+
+type Vector3 = { x: number; y: number; z: number };
 
 const CANVAS_HEIGHT = 900;
 const canvasSizes: Record<
@@ -97,6 +105,7 @@ const modeOptions: Array<{
   { mode: "ribbon", label: "Ribbon / tube", note: "Flowing" },
   { mode: "field", label: "Field", note: "Background" },
   { mode: "hatch", label: "Wave hatch", note: "Parallel sine" },
+  { mode: "globe", label: "Globe", note: "Geodesic mesh" },
 ];
 
 const baseSettings: Settings = {
@@ -129,6 +138,12 @@ const baseSettings: Settings = {
   hatchLength: 271,
   hatchSpacing: 4.55,
   hatchMargin: 68,
+  globeDetail: 2,
+  globeRadius: 365,
+  globeYaw: -12,
+  globeTilt: -8,
+  globeRoll: 2,
+  globeBackOpacity: 0.13,
   canvasRatio: "1:1",
   lineWeight: 0.7,
   opacity: 0.84,
@@ -242,6 +257,42 @@ const presets: Preset[] = [
       lineWeight: 0.45,
       opacity: 0.62,
       palette: "Midnight",
+    },
+  },
+  {
+    name: "Geodesic Globe",
+    note: "Triangulated sphere",
+    settings: {
+      mode: "globe",
+      globeDetail: 2,
+      globeRadius: 365,
+      globeYaw: -12,
+      globeTilt: -8,
+      globeRoll: 2,
+      globeBackOpacity: 0.13,
+      lineWeight: 1.05,
+      opacity: 0.9,
+      paper: "#FBFAF7",
+      ink: "#8C857B",
+      colorMode: "single",
+    },
+  },
+  {
+    name: "Dense Orb",
+    note: "Fine geodesic lattice",
+    settings: {
+      mode: "globe",
+      globeDetail: 3,
+      globeRadius: 350,
+      globeYaw: 18,
+      globeTilt: -14,
+      globeRoll: -5,
+      globeBackOpacity: 0.08,
+      lineWeight: 0.52,
+      opacity: 0.86,
+      paper: "#F4F0E7",
+      ink: "#6D716E",
+      colorMode: "single",
     },
   },
   {
@@ -772,10 +823,204 @@ function hatchPaths(settings: Settings): RenderPath[] {
   });
 }
 
+function normalizeVector(vector: Vector3): Vector3 {
+  const length = Math.hypot(vector.x, vector.y, vector.z) || 1;
+  return {
+    x: vector.x / length,
+    y: vector.y / length,
+    z: vector.z / length,
+  };
+}
+
+function rotateVector(
+  vector: Vector3,
+  yawDegrees: number,
+  tiltDegrees: number,
+  rollDegrees: number,
+): Vector3 {
+  const yaw = (yawDegrees * Math.PI) / 180;
+  const tilt = (tiltDegrees * Math.PI) / 180;
+  const roll = (rollDegrees * Math.PI) / 180;
+
+  const yawX = vector.x * Math.cos(yaw) + vector.z * Math.sin(yaw);
+  const yawZ = -vector.x * Math.sin(yaw) + vector.z * Math.cos(yaw);
+  const tiltY = vector.y * Math.cos(tilt) - yawZ * Math.sin(tilt);
+  const tiltZ = vector.y * Math.sin(tilt) + yawZ * Math.cos(tilt);
+
+  return {
+    x: yawX * Math.cos(roll) - tiltY * Math.sin(roll),
+    y: yawX * Math.sin(roll) + tiltY * Math.cos(roll),
+    z: tiltZ,
+  };
+}
+
+function sphericalInterpolate(start: Vector3, end: Vector3, t: number) {
+  const dot = Math.max(
+    -1,
+    Math.min(1, start.x * end.x + start.y * end.y + start.z * end.z),
+  );
+  const angle = Math.acos(dot);
+  if (angle < 0.000001) return start;
+  const angleSin = Math.sin(angle);
+  const startWeight = Math.sin((1 - t) * angle) / angleSin;
+  const endWeight = Math.sin(t * angle) / angleSin;
+  return normalizeVector({
+    x: start.x * startWeight + end.x * endWeight,
+    y: start.y * startWeight + end.y * endWeight,
+    z: start.z * startWeight + end.z * endWeight,
+  });
+}
+
+function globePaths(settings: Settings): RenderPath[] {
+  const {
+    globeDetail,
+    globeRadius,
+    globeYaw,
+    globeTilt,
+    globeRoll,
+    globeBackOpacity,
+    quality,
+  } = settings;
+  const { width, height } = canvasSize(settings);
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const golden = (1 + Math.sqrt(5)) / 2;
+  const vertices: Vector3[] = [
+    { x: -1, y: golden, z: 0 },
+    { x: 1, y: golden, z: 0 },
+    { x: -1, y: -golden, z: 0 },
+    { x: 1, y: -golden, z: 0 },
+    { x: 0, y: -1, z: golden },
+    { x: 0, y: 1, z: golden },
+    { x: 0, y: -1, z: -golden },
+    { x: 0, y: 1, z: -golden },
+    { x: golden, y: 0, z: -1 },
+    { x: golden, y: 0, z: 1 },
+    { x: -golden, y: 0, z: -1 },
+    { x: -golden, y: 0, z: 1 },
+  ].map(normalizeVector);
+  let faces: Array<[number, number, number]> = [
+    [0, 11, 5],
+    [0, 5, 1],
+    [0, 1, 7],
+    [0, 7, 10],
+    [0, 10, 11],
+    [1, 5, 9],
+    [5, 11, 4],
+    [11, 10, 2],
+    [10, 7, 6],
+    [7, 1, 8],
+    [3, 9, 4],
+    [3, 4, 2],
+    [3, 2, 6],
+    [3, 6, 8],
+    [3, 8, 9],
+    [4, 9, 5],
+    [2, 4, 11],
+    [6, 2, 10],
+    [8, 6, 7],
+    [9, 8, 1],
+  ];
+
+  for (let level = 0; level < globeDetail; level += 1) {
+    const midpointCache = new Map<string, number>();
+    const midpoint = (a: number, b: number) => {
+      const key = a < b ? `${a}:${b}` : `${b}:${a}`;
+      const cached = midpointCache.get(key);
+      if (cached !== undefined) return cached;
+      const left = vertices[a];
+      const right = vertices[b];
+      const index = vertices.push(
+        normalizeVector({
+          x: (left.x + right.x) / 2,
+          y: (left.y + right.y) / 2,
+          z: (left.z + right.z) / 2,
+        }),
+      ) - 1;
+      midpointCache.set(key, index);
+      return index;
+    };
+
+    const nextFaces: Array<[number, number, number]> = [];
+    for (const [a, b, c] of faces) {
+      const ab = midpoint(a, b);
+      const bc = midpoint(b, c);
+      const ca = midpoint(c, a);
+      nextFaces.push([a, ab, ca], [b, bc, ab], [c, ca, bc], [ab, bc, ca]);
+    }
+    faces = nextFaces;
+  }
+
+  const edgeMap = new Map<string, [number, number]>();
+  for (const [a, b, c] of faces) {
+    for (const [start, end] of [
+      [a, b],
+      [b, c],
+      [c, a],
+    ] as Array<[number, number]>) {
+      const key = start < end ? `${start}:${end}` : `${end}:${start}`;
+      if (!edgeMap.has(key)) edgeMap.set(key, [start, end]);
+    }
+  }
+
+  const curveSamples = quality >= 15000 ? 10 : quality <= 4800 ? 4 : 7;
+  const projectedEdges = Array.from(edgeMap.values()).map(
+    ([startIndex, endIndex], edgeIndex) => {
+      const start = vertices[startIndex];
+      const end = vertices[endIndex];
+      const commands: string[] = [];
+
+      for (let sample = 0; sample <= curveSamples; sample += 1) {
+        const point = sphericalInterpolate(start, end, sample / curveSamples);
+        const rotated = rotateVector(
+          point,
+          globeYaw,
+          globeTilt,
+          globeRoll,
+        );
+        const x = centerX + rotated.x * globeRadius;
+        const y = centerY - rotated.y * globeRadius;
+        commands.push(
+          `${sample ? "L" : "M"}${precise(x)} ${precise(y)}`,
+        );
+      }
+
+      const midpoint = rotateVector(
+        sphericalInterpolate(start, end, 0.5),
+        globeYaw,
+        globeTilt,
+        globeRoll,
+      );
+      const frontness = Math.max(0, Math.min(1, (midpoint.z + 0.18) / 0.48));
+      const smoothFrontness = frontness * frontness * (3 - 2 * frontness);
+
+      return {
+        depth: midpoint.z,
+        path: {
+          d: commands.join(""),
+          colorIndex: edgeIndex,
+          opacity:
+            globeBackOpacity + (1 - globeBackOpacity) * smoothFrontness,
+          weight: 0.72 + smoothFrontness * 0.28,
+        } satisfies RenderPath,
+      };
+    },
+  );
+
+  projectedEdges.sort((left, right) => left.depth - right.depth);
+  const outline = `M${precise(centerX - globeRadius)} ${precise(centerY)}A${precise(globeRadius)} ${precise(globeRadius)} 0 1 0 ${precise(centerX + globeRadius)} ${precise(centerY)}A${precise(globeRadius)} ${precise(globeRadius)} 0 1 0 ${precise(centerX - globeRadius)} ${precise(centerY)}`;
+
+  return [
+    ...projectedEdges.map(({ path }) => path),
+    { d: outline, colorIndex: 0, opacity: 0.86, weight: 1.08 },
+  ];
+}
+
 function generatePaths(settings: Settings) {
   if (settings.mode === "ribbon") return ribbonPaths(settings);
   if (settings.mode === "field") return fieldPaths(settings);
   if (settings.mode === "hatch") return hatchPaths(settings);
+  if (settings.mode === "globe") return globePaths(settings);
   return radialPaths(settings);
 }
 
@@ -903,6 +1148,12 @@ function randomizedSettings(current: Settings): Settings {
     hatchLength: 110 + Math.floor(Math.random() * 331),
     hatchSpacing: fixed(4 + Math.random() * 13),
     hatchMargin: Math.floor(Math.random() * 101),
+    globeDetail: 1 + Math.floor(Math.random() * 3),
+    globeRadius: 260 + Math.floor(Math.random() * 151),
+    globeYaw: Math.floor(-180 + Math.random() * 361),
+    globeTilt: Math.floor(-60 + Math.random() * 121),
+    globeRoll: Math.floor(-30 + Math.random() * 61),
+    globeBackOpacity: fixed(0.03 + Math.random() * 0.25),
     lineWeight:
       current.mode === "hatch"
         ? fixed(Math.round((0.35 + Math.random() * 5.65) * 20) / 20)
@@ -980,6 +1231,8 @@ export default function Home() {
           ? "Background field loaded."
           : mode === "hatch"
             ? "Precision wave hatch loaded."
+            : mode === "globe"
+              ? "Geodesic globe loaded."
           : "Radial geometry loaded.",
     );
   };
@@ -997,6 +1250,8 @@ export default function Home() {
     const geometryCode =
       settings.mode === "hatch"
         ? `${settings.hatchHeight}x${settings.hatchLength}`
+        : settings.mode === "globe"
+          ? `detail-${settings.globeDetail}`
         : `${settings.nodes}-${settings.divisor}`;
     downloadBlob(
       new Blob([exportSvg], { type: "image/svg+xml;charset=utf-8" }),
@@ -1054,6 +1309,8 @@ export default function Home() {
         ? "F"
         : settings.mode === "hatch"
           ? "H"
+          : settings.mode === "globe"
+            ? "G"
           : "R";
   const structureLabel =
     settings.mode === "field"
@@ -1062,6 +1319,8 @@ export default function Home() {
         ? `${settings.tubeThreads} × 2 HELICAL THREADS`
         : settings.mode === "hatch"
           ? `${paths.length.toLocaleString()} PARALLEL WAVES`
+          : settings.mode === "globe"
+            ? `${Math.max(0, paths.length - 1).toLocaleString()} GEODESIC EDGES`
         : `${settings.bands} ${settings.bands === 1 ? "STRAND" : "STRANDS"}`;
   const formula =
     settings.mode === "ribbon"
@@ -1080,6 +1339,11 @@ export default function Home() {
               expression:
                 "i·spacing + (height ÷ 2) sin(2πx ÷ length + phase)",
             }
+          : settings.mode === "globe"
+            ? {
+                symbol: "p̂",
+                expression: "normalize(subdivide(icosahedron)) → project(x, y)",
+              }
         : {
             symbol: "r(t)",
             expression: "mid + sin(t × nodes ÷ divisor) × range",
@@ -1097,18 +1361,20 @@ export default function Home() {
             <small>GUILLOCHÉ STUDIO</small>
           </span>
         </a>
-        <p className="edition">EDITION 03 / CURVES, RIBBONS, FIELDS & WAVES</p>
+        <p className="edition">
+          EDITION 04 / CURVES, RIBBONS, FIELDS, WAVES & SPHERES
+        </p>
       </header>
 
       <div className="studio-grid" id="top">
         <aside className="controls-panel" aria-label="Pattern controls">
           <section className="intro">
             <p className="eyebrow">Pattern workshop</p>
-            <h1>Draw in rings, ribbons, fields, and waves.</h1>
+            <h1>Draw in rings, ribbons, fields, waves, and spheres.</h1>
             <p>
               Wrap the same mathematical weave around a medallion, along a
-              flowing tube, across a background, or into a precision sine
-              hatch.
+              flowing tube, across a background, into a precision sine hatch,
+              or over a geodesic globe.
             </p>
           </section>
 
@@ -1368,20 +1634,46 @@ export default function Home() {
                 </>
               )}
 
-              <RangeControl
-                label="Rotation"
-                value={settings.rotation}
-                min={-90}
-                max={90}
-                unit="°"
-                onChange={(value) => update("rotation", value)}
-              />
+              {settings.mode === "globe" && (
+                <>
+                  <RangeControl
+                    label="Mesh detail"
+                    value={settings.globeDetail}
+                    min={1}
+                    max={3}
+                    onChange={(value) => update("globeDetail", value)}
+                  />
+                  <RangeControl
+                    label="Globe size"
+                    value={settings.globeRadius}
+                    min={160}
+                    max={410}
+                    unit=" px"
+                    onChange={(value) => update("globeRadius", value)}
+                  />
+                  <div className="math-note is-good">
+                    <span>True icosphere</span>
+                    <small>Every triangular vertex is normalized to a sphere</small>
+                  </div>
+                </>
+              )}
+
+              {settings.mode !== "globe" && (
+                <RangeControl
+                  label="Rotation"
+                  value={settings.rotation}
+                  min={-90}
+                  max={90}
+                  unit="°"
+                  onChange={(value) => update("rotation", value)}
+                />
+              )}
             </div>
           </details>
 
           <details className="control-section" open>
             <summary>
-              <span>02 / Weave</span>
+              <span>02 / {settings.mode === "globe" ? "Projection" : "Weave"}</span>
               <span className="summary-mark" aria-hidden="true">
                 +
               </span>
@@ -1411,6 +1703,45 @@ export default function Home() {
                     Identical curves, smooth tangents, constant stroke
                   </small>
                 </div>
+              ) : settings.mode === "globe" ? (
+                <>
+                  <RangeControl
+                    label="Yaw"
+                    value={settings.globeYaw}
+                    min={-180}
+                    max={180}
+                    unit="°"
+                    onChange={(value) => update("globeYaw", value)}
+                  />
+                  <RangeControl
+                    label="Tilt"
+                    value={settings.globeTilt}
+                    min={-90}
+                    max={90}
+                    unit="°"
+                    onChange={(value) => update("globeTilt", value)}
+                  />
+                  <RangeControl
+                    label="Roll"
+                    value={settings.globeRoll}
+                    min={-180}
+                    max={180}
+                    unit="°"
+                    onChange={(value) => update("globeRoll", value)}
+                  />
+                  <RangeControl
+                    label="Rear mesh visibility"
+                    value={settings.globeBackOpacity}
+                    min={0}
+                    max={0.6}
+                    step={0.01}
+                    onChange={(value) => update("globeBackOpacity", value)}
+                  />
+                  <div className="math-note is-good">
+                    <span>Orthographic sphere</span>
+                    <small>Great-circle edges with depth-layered visibility</small>
+                  </div>
+                </>
               ) : (
                 <>
                   <RangeControl
@@ -1451,15 +1782,17 @@ export default function Home() {
                   </div>
                 </>
               )}
-              <RangeControl
-                label="Global phase"
-                value={settings.phase}
-                min={0}
-                max={6.28}
-                step={0.01}
-                onChange={(value) => update("phase", value)}
-              />
-              {settings.mode !== "hatch" && (
+              {settings.mode !== "globe" && (
+                <RangeControl
+                  label="Global phase"
+                  value={settings.phase}
+                  min={0}
+                  max={6.28}
+                  step={0.01}
+                  onChange={(value) => update("phase", value)}
+                />
+              )}
+              {settings.mode !== "hatch" && settings.mode !== "globe" && (
                 <RangeControl
                   label="Strand offset"
                   value={settings.bandPhase}
@@ -1472,7 +1805,7 @@ export default function Home() {
             </div>
           </details>
 
-          {settings.mode !== "hatch" && (
+          {settings.mode !== "hatch" && settings.mode !== "globe" && (
             <details className="control-section">
               <summary>
                 <span>
@@ -1709,6 +2042,8 @@ export default function Home() {
                     ? `${settings.tubeStyle} guilloché with ${settings.tubeThreads} helical threads and ${settings.tubeTwist} turns`
                     : settings.mode === "hatch"
                       ? `wave hatch with ${settings.hatchHeight} pixel height and ${settings.hatchLength} pixel wavelength`
+                      : settings.mode === "globe"
+                        ? `geodesic globe with subdivision detail ${settings.globeDetail}`
                     : `${settings.mode} guilloché pattern with ${settings.nodes} nodes and divisor ${settings.divisor}`
                 }
               >
@@ -1770,6 +2105,8 @@ export default function Home() {
                 PLATE {modeCode}-
                 {settings.mode === "hatch"
                   ? `${settings.hatchHeight}.${settings.hatchLength}`
+                  : settings.mode === "globe"
+                    ? `D${settings.globeDetail}.${settings.globeRadius}`
                   : `${settings.nodes}.${settings.divisor}`}
               </span>
               <span>
