@@ -76,6 +76,7 @@ type RenderPath = {
 type Vector3 = { x: number; y: number; z: number };
 
 const CANVAS_HEIGHT = 900;
+const PREVIEW_QUALITY = 1800;
 const canvasSizes: Record<
   CanvasRatio,
   { width: number; height: number; label: string }
@@ -434,7 +435,7 @@ function radialPaths(settings: Settings): RenderPath[] {
   const totalAngle = Math.PI * 2 * divisor;
   const pointCount = Math.min(
     24000,
-    Math.max(2400, quality, Math.ceil(nodes * 28)),
+    Math.max(1200, quality, Math.ceil(nodes * 14)),
   );
   const rotationRadians = (rotation * Math.PI) / 180;
   const xScale = aspect >= 1 ? 1 / aspect : 1;
@@ -1168,7 +1169,17 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const renderSettings = useDeferredValue(settings);
-  const paths = useMemo(() => generatePaths(renderSettings), [renderSettings]);
+  const previewSettings = useMemo(
+    () => ({
+      ...renderSettings,
+      quality: Math.min(renderSettings.quality, PREVIEW_QUALITY),
+    }),
+    [renderSettings],
+  );
+  const paths = useMemo(
+    () => generatePaths(previewSettings),
+    [previewSettings],
+  );
   const colors =
     palettes[renderSettings.palette] ?? palettes[baseSettings.palette];
   const complexity = gcd(settings.nodes, settings.divisor);
