@@ -39,6 +39,10 @@ test("renders the guilloche studio", async () => {
   assert.match(html, /Ribbon \/ tube/);
   assert.match(html, /Wave hatch/);
   assert.match(html, /Globe/);
+  assert.match(html, /Spirograph/);
+  assert.match(html, /Guilloché border/);
+  assert.match(html, /Moiré interference/);
+  assert.match(html, /Torus mesh/);
   assert.match(html, /Treasury/);
   assert.match(html, /Rosette/);
   assert.doesNotMatch(html, /Reference Hatch/);
@@ -64,7 +68,42 @@ test("uses a Figma-style floating tool dock and contextual left inspector", asyn
   assert.doesNotMatch(source, /Canvas aspect ratio|chooseCanvasRatio/);
   assert.doesNotMatch(source, /geometry loaded|field loaded|hatch loaded|globe loaded/i);
   assert.match(styles, /\.tool-dock[\s\S]*position: absolute/);
+  assert.match(styles, /\.tool-dock[\s\S]*overflow-x: auto/);
+  assert.match(styles, /\.tool-dock::-webkit-scrollbar[\s\S]*display: none/);
   assert.match(styles, /\.tool-button\.is-active[\s\S]*background: #ededed/);
+});
+
+test("includes exact border, spirograph, and moire constructions", async () => {
+  const source = await readFile(
+    new URL("../app/page.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /function borderPaths\(settings: Settings\)/);
+  assert.match(source, /signedPower\(Math\.cos\(angle\), exponent\)/);
+  assert.match(source, /tangentY \/ tangentLength/);
+  assert.match(source, /function spirographPaths\(settings: Settings\)/);
+  assert.match(source, /spiroRollingRadius \/ gcd\(/);
+  assert.match(source, /totalAngle = Math\.PI \* 2 \* closureTurns/);
+  assert.match(source, /function moirePaths\(settings: Settings\)/);
+  assert.match(source, /normalX = -directionY/);
+  assert.match(source, /function circlePath\(/);
+});
+
+test("builds a seamless parametric torus with layered nodes", async () => {
+  const source = await readFile(
+    new URL("../app/page.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /function torusPaths\(settings: Settings\)/);
+  assert.match(source, /torusMajorRadius \+ torusMinorRadius \* Math\.cos\(v\)/);
+  assert.match(source, /vertexIndex\(major \+ 1, minor\)/);
+  assert.match(source, /vertexIndex\(major, minor \+ 1\)/);
+  assert.match(source, /rearEdge: 0[\s\S]*rearNode: 1[\s\S]*frontEdge: 2[\s\S]*frontNode: 3/);
+  assert.match(source, /selectedNodeSet\.has\(startIndex\)/);
+  assert.match(source, /selectedNodeSet\.has\(endIndex\)/);
+  assert.match(source, /depth >= 0 \? 1 : globeBackOpacity/);
 });
 
 test("includes deterministic globe intersection controls", async () => {
@@ -90,7 +129,10 @@ test("exports globe paths with exactly front and rear opacity groups", async () 
   );
 
   assert.match(source, /depth >= 0 \? 1 : globeBackOpacity/);
-  assert.match(source, /settings\.mode === "globe"\s*\? localOpacity/);
+  assert.match(
+    source,
+    /settings\.mode === "globe" \|\| settings\.mode === "torus"/,
+  );
   assert.match(source, /opacity: 1, weight: 1\.08/);
   assert.match(source, /fill: true/);
   assert.match(source, /fillColor: globeNodeFill/);

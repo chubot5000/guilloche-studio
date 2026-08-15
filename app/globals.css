@@ -544,10 +544,19 @@ input[type="color"]:disabled {
   display: flex;
   gap: 3px;
   left: 50%;
+  max-width: calc(100% - 24px);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
   padding: 5px;
   position: absolute;
+  scrollbar-width: none;
   transform: translateX(-50%);
+  -webkit-overflow-scrolling: touch;
   z-index: 6;
+}
+
+.tool-dock::-webkit-scrollbar {
+  display: none;
 }
 
 .tool-button {
@@ -557,6 +566,7 @@ input[type="color"]:disabled {
   border-radius: 7px;
   color: #bdbdbd;
   display: flex;
+  flex: 0 0 38px;
   height: 38px;
   justify-content: center;
   padding: 0;
@@ -895,8 +905,13 @@ input[type="color"]:disabled {
   }
 
   .tool-button {
+    flex-basis: 36px;
     height: 36px;
     width: 36px;
+  }
+
+  .tool-button::after {
+    display: none;
   }
 
   .preset-grid {

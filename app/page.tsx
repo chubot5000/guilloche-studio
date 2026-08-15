@@ -12,18 +12,33 @@ import { CaretDown } from "@phosphor-icons/react/CaretDown";
 import { Check } from "@phosphor-icons/react/Check";
 import { CirclesThree } from "@phosphor-icons/react/CirclesThree";
 import { CopySimple } from "@phosphor-icons/react/CopySimple";
+import { CornersOut } from "@phosphor-icons/react/CornersOut";
 import { DownloadSimple } from "@phosphor-icons/react/DownloadSimple";
+import { Flower } from "@phosphor-icons/react/Flower";
 import { GlobeHemisphereWest } from "@phosphor-icons/react/GlobeHemisphereWest";
 import { GridFour } from "@phosphor-icons/react/GridFour";
+import { IntersectThree } from "@phosphor-icons/react/IntersectThree";
+import { Lifebuoy } from "@phosphor-icons/react/Lifebuoy";
 import { WaveSine } from "@phosphor-icons/react/WaveSine";
 import { Waves } from "@phosphor-icons/react/Waves";
 
 type ColorMode = "single" | "layered";
-type PatternMode = "medallion" | "ribbon" | "field" | "hatch" | "globe";
+type PatternMode =
+  | "medallion"
+  | "spirograph"
+  | "border"
+  | "ribbon"
+  | "field"
+  | "moire"
+  | "hatch"
+  | "globe"
+  | "torus";
 type TubeStyle = "ribbon" | "tube";
 type CanvasRatio = "1:1" | "3:2" | "16:9";
 type GlobeNodeStyle = "filled" | "stroked";
 type GlobeNodeShape = "circle" | "triangle" | "diamond";
+type SpiroType = "hypotrochoid" | "epitrochoid";
+type MoireType = "linear" | "radial";
 
 type Settings = {
   mode: PatternMode;
@@ -40,6 +55,19 @@ type Settings = {
   bandPhase: number;
   aspect: number;
   rotation: number;
+  spiroType: SpiroType;
+  spiroFixedRadius: number;
+  spiroRollingRadius: number;
+  spiroPenOffset: number;
+  spiroScale: number;
+  spiroLayers: number;
+  spiroLayerRotation: number;
+  borderLayers: number;
+  borderMargin: number;
+  borderSpacing: number;
+  borderAmplitude: number;
+  borderFrequency: number;
+  borderRoundness: number;
   tubeStyle: TubeStyle;
   tubeWidth: number;
   tubeThreads: number;
@@ -51,6 +79,11 @@ type Settings = {
   fieldScale: number;
   fieldDrift: number;
   fieldCrossWeave: boolean;
+  moireType: MoireType;
+  moireSpacing: number;
+  moireAngle: number;
+  moireOffset: number;
+  moirePhase: number;
   hatchHeight: number;
   hatchLength: number;
   hatchSpacing: number;
@@ -67,6 +100,13 @@ type Settings = {
   globeNodeShape: GlobeNodeShape;
   globeNodeFill: string;
   globeNodeStroke: string;
+  torusMajorRadius: number;
+  torusMinorRadius: number;
+  torusMajorSegments: number;
+  torusMinorSegments: number;
+  torusYaw: number;
+  torusTilt: number;
+  torusRoll: number;
   canvasRatio: CanvasRatio;
   lineWeight: number;
   opacity: number;
@@ -125,10 +165,14 @@ const modeOptions: Array<{
   note: string;
 }> = [
   { mode: "medallion", label: "Medallion", note: "Radial" },
+  { mode: "spirograph", label: "Spirograph", note: "Trochoid" },
+  { mode: "border", label: "Guilloché border", note: "Frame" },
   { mode: "ribbon", label: "Ribbon / tube", note: "Flowing" },
   { mode: "field", label: "Field", note: "Background" },
+  { mode: "moire", label: "Moiré interference", note: "Optical" },
   { mode: "hatch", label: "Wave hatch", note: "Parallel sine" },
   { mode: "globe", label: "Globe", note: "Geodesic mesh" },
+  { mode: "torus", label: "Torus mesh", note: "Parametric" },
 ];
 
 const baseSettings: Settings = {
@@ -146,6 +190,19 @@ const baseSettings: Settings = {
   bandPhase: 0.5,
   aspect: 1,
   rotation: 0,
+  spiroType: "hypotrochoid",
+  spiroFixedRadius: 96,
+  spiroRollingRadius: 37,
+  spiroPenOffset: 72,
+  spiroScale: 340,
+  spiroLayers: 2,
+  spiroLayerRotation: 3,
+  borderLayers: 8,
+  borderMargin: 86,
+  borderSpacing: 7,
+  borderAmplitude: 10,
+  borderFrequency: 28,
+  borderRoundness: 6,
   tubeStyle: "tube",
   tubeWidth: 245,
   tubeThreads: 14,
@@ -157,6 +214,11 @@ const baseSettings: Settings = {
   fieldScale: 1,
   fieldDrift: 0.33,
   fieldCrossWeave: false,
+  moireType: "linear",
+  moireSpacing: 10,
+  moireAngle: 7,
+  moireOffset: 0,
+  moirePhase: 0.45,
   hatchHeight: 81,
   hatchLength: 271,
   hatchSpacing: 4.55,
@@ -173,6 +235,13 @@ const baseSettings: Settings = {
   globeNodeShape: "circle",
   globeNodeFill: "#173A59",
   globeNodeStroke: "#C08C56",
+  torusMajorRadius: 245,
+  torusMinorRadius: 92,
+  torusMajorSegments: 32,
+  torusMinorSegments: 14,
+  torusYaw: 20,
+  torusTilt: -24,
+  torusRoll: -4,
   canvasRatio: "1:1",
   lineWeight: 0.7,
   opacity: 0.84,
@@ -206,6 +275,70 @@ const presets: Preset[] = [
       outerAmplitude: 34,
       bandPhase: 1.2,
       palette: "Vermilion",
+    },
+  },
+  {
+    name: "Hypotrochoid Seal",
+    note: "Closed rolling curve",
+    settings: {
+      mode: "spirograph",
+      spiroType: "hypotrochoid",
+      spiroFixedRadius: 96,
+      spiroRollingRadius: 37,
+      spiroPenOffset: 72,
+      spiroScale: 340,
+      spiroLayers: 2,
+      spiroLayerRotation: 3,
+      lineWeight: 0.62,
+      palette: "Treasury",
+    },
+  },
+  {
+    name: "Epicyclic Bloom",
+    note: "Layered outer roll",
+    settings: {
+      mode: "spirograph",
+      spiroType: "epitrochoid",
+      spiroFixedRadius: 84,
+      spiroRollingRadius: 29,
+      spiroPenOffset: 44,
+      spiroScale: 330,
+      spiroLayers: 3,
+      spiroLayerRotation: 2,
+      lineWeight: 0.54,
+      palette: "Vermilion",
+    },
+  },
+  {
+    name: "Security Frame",
+    note: "Woven superellipse",
+    settings: {
+      mode: "border",
+      borderLayers: 8,
+      borderMargin: 86,
+      borderSpacing: 7,
+      borderAmplitude: 10,
+      borderFrequency: 28,
+      borderRoundness: 6,
+      bandPhase: 0.55,
+      lineWeight: 0.55,
+      palette: "Treasury",
+    },
+  },
+  {
+    name: "Oval Reserve",
+    note: "Fine engraved cartouche",
+    settings: {
+      mode: "border",
+      borderLayers: 12,
+      borderMargin: 105,
+      borderSpacing: 4.5,
+      borderAmplitude: 6,
+      borderFrequency: 36,
+      borderRoundness: 2,
+      bandPhase: 0.32,
+      lineWeight: 0.45,
+      palette: "Botanical",
     },
   },
   {
@@ -289,6 +422,36 @@ const presets: Preset[] = [
     },
   },
   {
+    name: "Interference Grid",
+    note: "Twin line fields",
+    settings: {
+      mode: "moire",
+      moireType: "linear",
+      moireSpacing: 10,
+      moireAngle: 7,
+      moireOffset: 0,
+      moirePhase: 0.45,
+      lineWeight: 0.48,
+      opacity: 0.72,
+      palette: "Treasury",
+    },
+  },
+  {
+    name: "Offset Rings",
+    note: "Concentric interference",
+    settings: {
+      mode: "moire",
+      moireType: "radial",
+      moireSpacing: 12,
+      moireAngle: 8,
+      moireOffset: 34,
+      moirePhase: 0.5,
+      lineWeight: 0.58,
+      opacity: 0.76,
+      palette: "Midnight",
+    },
+  },
+  {
     name: "Geodesic Globe",
     note: "Triangulated sphere",
     settings: {
@@ -349,6 +512,53 @@ const presets: Preset[] = [
       globeNodeFill: "#765F52",
       globeNodeStroke: "#C69A63",
       lineWeight: 0.7,
+      opacity: 0.9,
+      paper: "#F8F4EA",
+      ink: "#765F52",
+      colorMode: "single",
+    },
+  },
+  {
+    name: "Wire Torus",
+    note: "Two-sided ring mesh",
+    settings: {
+      mode: "torus",
+      torusMajorRadius: 245,
+      torusMinorRadius: 92,
+      torusMajorSegments: 32,
+      torusMinorSegments: 14,
+      torusYaw: 20,
+      torusTilt: -24,
+      torusRoll: -4,
+      globeBackOpacity: 0.12,
+      globeNodeAmount: 0,
+      lineWeight: 0.82,
+      opacity: 0.9,
+      paper: "#FBFAF7",
+      ink: "#756F67",
+      colorMode: "single",
+    },
+  },
+  {
+    name: "Nodal Ring",
+    note: "Marked parametric lattice",
+    settings: {
+      mode: "torus",
+      torusMajorRadius: 230,
+      torusMinorRadius: 110,
+      torusMajorSegments: 24,
+      torusMinorSegments: 12,
+      torusYaw: -16,
+      torusTilt: -32,
+      torusRoll: 5,
+      globeBackOpacity: 0.09,
+      globeNodeAmount: 35,
+      globeNodeSize: 3.5,
+      globeNodeStyle: "stroked",
+      globeNodeShape: "diamond",
+      globeNodeFill: "#F8F4EA",
+      globeNodeStroke: "#765F52",
+      lineWeight: 0.68,
       opacity: 0.9,
       paper: "#F8F4EA",
       ink: "#765F52",
@@ -530,6 +740,141 @@ function radialPaths(settings: Settings): RenderPath[] {
     }
 
     return { d: commandsFromPoints(points), colorIndex: band };
+  });
+}
+
+function signedPower(value: number, exponent: number) {
+  return Math.sign(value) * Math.abs(value) ** exponent;
+}
+
+function borderPaths(settings: Settings): RenderPath[] {
+  const {
+    borderLayers,
+    borderMargin,
+    borderSpacing,
+    borderAmplitude,
+    borderFrequency,
+    borderRoundness,
+    phase,
+    bandPhase,
+    rotation,
+    quality,
+  } = settings;
+  const { width, height } = canvasSize(settings);
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const pointCount = Math.min(4800, Math.max(720, Math.round(quality / 2)));
+  const exponent = 2 / borderRoundness;
+
+  return Array.from({ length: borderLayers }, (_, layer) => {
+    const a = Math.max(
+      28,
+      width / 2 - borderMargin - borderAmplitude - layer * borderSpacing,
+    );
+    const b = Math.max(
+      28,
+      height / 2 - borderMargin - borderAmplitude - layer * borderSpacing,
+    );
+    const basePoint = (angle: number) => ({
+      x: centerX + a * signedPower(Math.cos(angle), exponent),
+      y: centerY + b * signedPower(Math.sin(angle), exponent),
+    });
+    const points: Array<{ x: number; y: number }> = [];
+    const delta = (Math.PI * 2) / pointCount;
+
+    for (let index = 0; index < pointCount; index += 1) {
+      const angle = (Math.PI * 2 * index) / pointCount;
+      const previous = basePoint(angle - delta);
+      const next = basePoint(angle + delta);
+      const tangentX = next.x - previous.x;
+      const tangentY = next.y - previous.y;
+      const tangentLength = Math.hypot(tangentX, tangentY) || 1;
+      const wave =
+        borderAmplitude *
+        Math.sin(borderFrequency * angle + phase + layer * bandPhase);
+      const base = basePoint(angle);
+      points.push(
+        rotatePoint(
+          base.x + (tangentY / tangentLength) * wave,
+          base.y - (tangentX / tangentLength) * wave,
+          rotation,
+          width,
+          height,
+        ),
+      );
+    }
+
+    return {
+      d: `${commandsFromPoints(points)}Z`,
+      colorIndex: layer,
+    };
+  });
+}
+
+function spirographPaths(settings: Settings): RenderPath[] {
+  const {
+    spiroType,
+    spiroFixedRadius,
+    spiroRollingRadius,
+    spiroPenOffset,
+    spiroScale,
+    spiroLayers,
+    spiroLayerRotation,
+    phase,
+    rotation,
+    quality,
+  } = settings;
+  const { width, height } = canvasSize(settings);
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const closureTurns = spiroRollingRadius / gcd(
+    spiroFixedRadius,
+    spiroRollingRadius,
+  );
+  const totalAngle = Math.PI * 2 * closureTurns;
+  const pointCount = Math.min(
+    14000,
+    Math.max(
+      1200,
+      Math.round(quality * Math.min(4, Math.max(1, closureTurns / 4))),
+    ),
+  );
+  const baseRadius =
+    spiroType === "hypotrochoid"
+      ? spiroFixedRadius - spiroRollingRadius
+      : spiroFixedRadius + spiroRollingRadius;
+  const maximumExtent = Math.abs(baseRadius) + spiroPenOffset || 1;
+  const fit = spiroScale / maximumExtent;
+
+  return Array.from({ length: spiroLayers }, (_, layer) => {
+    const points: Array<{ x: number; y: number }> = [];
+    const layerRotation = rotation + layer * spiroLayerRotation;
+    for (let index = 0; index < pointCount; index += 1) {
+      const t = (totalAngle * index) / pointCount + phase;
+      const rollingAngle = (baseRadius / spiroRollingRadius) * t;
+      const x =
+        baseRadius * Math.cos(t) +
+        (spiroType === "hypotrochoid" ? 1 : -1) *
+          spiroPenOffset *
+          Math.cos(rollingAngle);
+      const y =
+        baseRadius * Math.sin(t) -
+        spiroPenOffset * Math.sin(rollingAngle);
+      points.push(
+        rotatePoint(
+          centerX + x * fit,
+          centerY + y * fit,
+          layerRotation,
+          width,
+          height,
+        ),
+      );
+    }
+    return {
+      d: `${commandsFromPoints(points)}Z`,
+      colorIndex: layer,
+      opacity: 1 - layer * 0.08,
+    };
   });
 }
 
@@ -792,6 +1137,83 @@ function fieldPaths(settings: Settings): RenderPath[] {
       });
     }
   }
+
+  return paths;
+}
+
+function circlePath(centerX: number, centerY: number, radius: number) {
+  return `M${precise(centerX - radius)} ${precise(centerY)}A${precise(radius)} ${precise(radius)} 0 1 0 ${precise(centerX + radius)} ${precise(centerY)}A${precise(radius)} ${precise(radius)} 0 1 0 ${precise(centerX - radius)} ${precise(centerY)}`;
+}
+
+function moirePaths(settings: Settings): RenderPath[] {
+  const {
+    moireType,
+    moireSpacing,
+    moireAngle,
+    moireOffset,
+    moirePhase,
+    rotation,
+  } = settings;
+  const { width, height } = canvasSize(settings);
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const reach = Math.hypot(width, height) * 0.72;
+  const paths: RenderPath[] = [];
+
+  if (moireType === "linear") {
+    const addFamily = (family: number, angleDegrees: number, shift: number) => {
+      const angle = (angleDegrees * Math.PI) / 180;
+      const directionX = Math.cos(angle);
+      const directionY = Math.sin(angle);
+      const normalX = -directionY;
+      const normalY = directionX;
+      const lineCount = Math.ceil((reach * 2) / moireSpacing) + 2;
+      const start = -Math.floor(lineCount / 2);
+
+      for (let index = 0; index < lineCount; index += 1) {
+        const offset = (start + index) * moireSpacing + shift;
+        const anchorX = centerX + normalX * offset;
+        const anchorY = centerY + normalY * offset;
+        paths.push({
+          d: `M${precise(anchorX - directionX * reach)} ${precise(anchorY - directionY * reach)}L${precise(anchorX + directionX * reach)} ${precise(anchorY + directionY * reach)}`,
+          colorIndex: family,
+          opacity: family ? 0.82 : 1,
+        });
+      }
+    };
+
+    addFamily(0, rotation - moireAngle / 2, 0);
+    addFamily(
+      1,
+      rotation + moireAngle / 2,
+      moireOffset + moirePhase * moireSpacing,
+    );
+    return paths;
+  }
+
+  const centerAngle = (rotation * Math.PI) / 180;
+  const offsetX = (Math.cos(centerAngle) * moireOffset) / 2;
+  const offsetY = (Math.sin(centerAngle) * moireOffset) / 2;
+  const centers = [
+    { x: centerX - offsetX, y: centerY - offsetY, phase: 0 },
+    {
+      x: centerX + offsetX,
+      y: centerY + offsetY,
+      phase: moirePhase * moireSpacing,
+    },
+  ];
+
+  centers.forEach((center, family) => {
+    const ringCount = Math.ceil((reach + moireOffset) / moireSpacing) + 1;
+    for (let ring = 1; ring <= ringCount; ring += 1) {
+      const radius = ring * moireSpacing + center.phase;
+      paths.push({
+        d: circlePath(center.x, center.y, radius),
+        colorIndex: family,
+        opacity: family ? 0.82 : 1,
+      });
+    }
+  });
 
   return paths;
 }
@@ -1214,11 +1636,195 @@ function globePaths(settings: Settings): RenderPath[] {
   return renderItems.map(({ path }) => path);
 }
 
+function torusPaths(settings: Settings): RenderPath[] {
+  const {
+    torusMajorRadius,
+    torusMinorRadius,
+    torusMajorSegments,
+    torusMinorSegments,
+    torusYaw,
+    torusTilt,
+    torusRoll,
+    globeBackOpacity,
+    globeNodeAmount,
+    globeNodeSize,
+    globeNodeStyle,
+    globeNodeShape,
+    globeNodeFill,
+    globeNodeStroke,
+  } = settings;
+  const { width, height } = canvasSize(settings);
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const vertices: Vector3[] = [];
+  const vertexIndex = (major: number, minor: number) =>
+    ((major + torusMajorSegments) % torusMajorSegments) *
+      torusMinorSegments +
+    ((minor + torusMinorSegments) % torusMinorSegments);
+
+  for (let major = 0; major < torusMajorSegments; major += 1) {
+    const u = (Math.PI * 2 * major) / torusMajorSegments;
+    for (let minor = 0; minor < torusMinorSegments; minor += 1) {
+      const v = (Math.PI * 2 * minor) / torusMinorSegments;
+      const ringRadius = torusMajorRadius + torusMinorRadius * Math.cos(v);
+      vertices.push({
+        x: ringRadius * Math.cos(u),
+        y: torusMinorRadius * Math.sin(v),
+        z: ringRadius * Math.sin(u),
+      });
+    }
+  }
+
+  const projectedVertices = vertices.map((vertex) => {
+    const rotated = rotateVector(vertex, torusYaw, torusTilt, torusRoll);
+    return {
+      x: centerX + rotated.x,
+      y: centerY - rotated.y,
+      z: rotated.z,
+    };
+  });
+  const edges: Array<[number, number, number]> = [];
+  for (let major = 0; major < torusMajorSegments; major += 1) {
+    for (let minor = 0; minor < torusMinorSegments; minor += 1) {
+      const start = vertexIndex(major, minor);
+      edges.push(
+        [start, vertexIndex(major + 1, minor), 0],
+        [start, vertexIndex(major, minor + 1), 1],
+      );
+    }
+  }
+
+  const nodeCount = Math.round(
+    projectedVertices.length * (globeNodeAmount / 100),
+  );
+  const selectedNodeIndices = projectedVertices
+    .map((_, index) => ({
+      index,
+      order: Math.imul(index + 1, -1640531527) >>> 0,
+    }))
+    .sort((left, right) => left.order - right.order)
+    .slice(0, nodeCount)
+    .map(({ index }) => index);
+  const selectedNodeSet = new Set(selectedNodeIndices);
+  const nodeClearance = globeNodeSize / 2 + settings.lineWeight / 2;
+  const sideOpacity = (depth: number) =>
+    depth >= 0 ? 1 : globeBackOpacity;
+  const torusLayer = {
+    rearEdge: 0,
+    rearNode: 1,
+    frontEdge: 2,
+    frontNode: 3,
+  } as const;
+  type TorusRenderItem = {
+    depth: number;
+    layer: number;
+    path: RenderPath;
+  };
+
+  const edgeRenderItem = (
+    start: Vector3,
+    end: Vector3,
+    colorIndex: number,
+  ): TorusRenderItem => {
+    const depth = (start.z + end.z) / 2;
+    return {
+      depth,
+      layer: depth >= 0 ? torusLayer.frontEdge : torusLayer.rearEdge,
+      path: {
+        d: `M${precise(start.x)} ${precise(start.y)}L${precise(end.x)} ${precise(end.y)}`,
+        colorIndex,
+        opacity: sideOpacity(depth),
+        weight: 1,
+      },
+    };
+  };
+
+  const renderItems: TorusRenderItem[] = edges.flatMap(
+    ([startIndex, endIndex, family]) => {
+      const start = projectedVertices[startIndex];
+      const end = projectedVertices[endIndex];
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+      const dz = end.z - start.z;
+      const projectedLength = Math.hypot(dx, dy) || 1;
+      let startInset = selectedNodeSet.has(startIndex)
+        ? Math.min(nodeClearance / projectedLength, 0.42)
+        : 0;
+      let endInset = selectedNodeSet.has(endIndex)
+        ? Math.min(nodeClearance / projectedLength, 0.42)
+        : 0;
+      const insetTotal = startInset + endInset;
+      if (insetTotal > 0.84) {
+        const insetScale = 0.84 / insetTotal;
+        startInset *= insetScale;
+        endInset *= insetScale;
+      }
+      const trimmedStart = {
+        x: start.x + dx * startInset,
+        y: start.y + dy * startInset,
+        z: start.z + dz * startInset,
+      };
+      const trimmedEnd = {
+        x: end.x - dx * endInset,
+        y: end.y - dy * endInset,
+        z: end.z - dz * endInset,
+      };
+
+      if (trimmedStart.z * trimmedEnd.z < 0) {
+        const horizonRatio =
+          -trimmedStart.z / (trimmedEnd.z - trimmedStart.z);
+        const horizon = {
+          x: trimmedStart.x + (trimmedEnd.x - trimmedStart.x) * horizonRatio,
+          y: trimmedStart.y + (trimmedEnd.y - trimmedStart.y) * horizonRatio,
+          z: 0,
+        };
+        return [
+          edgeRenderItem(trimmedStart, horizon, family),
+          edgeRenderItem(horizon, trimmedEnd, family),
+        ];
+      }
+      return [edgeRenderItem(trimmedStart, trimmedEnd, family)];
+    },
+  );
+
+  for (const index of selectedNodeIndices) {
+    const point = projectedVertices[index];
+    renderItems.push({
+      depth: point.z,
+      layer: point.z >= 0 ? torusLayer.frontNode : torusLayer.rearNode,
+      path: {
+        d: globeNodePath(
+          point.x,
+          point.y,
+          globeNodeSize,
+          globeNodeShape,
+        ),
+        colorIndex: index,
+        opacity: sideOpacity(point.z),
+        weight: 1,
+        fill: true,
+        stroke: globeNodeStyle === "stroked",
+        fillColor: globeNodeFill,
+        strokeColor: globeNodeStroke,
+      },
+    });
+  }
+
+  renderItems.sort(
+    (left, right) => left.layer - right.layer || left.depth - right.depth,
+  );
+  return renderItems.map(({ path }) => path);
+}
+
 function generatePaths(settings: Settings) {
+  if (settings.mode === "spirograph") return spirographPaths(settings);
+  if (settings.mode === "border") return borderPaths(settings);
   if (settings.mode === "ribbon") return ribbonPaths(settings);
   if (settings.mode === "field") return fieldPaths(settings);
+  if (settings.mode === "moire") return moirePaths(settings);
   if (settings.mode === "hatch") return hatchPaths(settings);
   if (settings.mode === "globe") return globePaths(settings);
+  if (settings.mode === "torus") return torusPaths(settings);
   return radialPaths(settings);
 }
 
@@ -1246,7 +1852,7 @@ function pathOutline(settings: Settings, path: RenderPath, colors: string[]) {
 
 function pathOpacity(settings: Settings, path: RenderPath) {
   const localOpacity = path.opacity ?? 1;
-  return settings.mode === "globe"
+  return settings.mode === "globe" || settings.mode === "torus"
     ? localOpacity
     : settings.opacity * localOpacity;
 }
@@ -1337,10 +1943,14 @@ function RangeControl({
 function ModeIcon({ mode }: { mode: PatternMode }) {
   const iconProps = { size: 20, weight: "regular" as const };
   if (mode === "medallion") return <CirclesThree {...iconProps} />;
+  if (mode === "spirograph") return <Flower {...iconProps} />;
+  if (mode === "border") return <CornersOut {...iconProps} />;
   if (mode === "ribbon") return <Waves {...iconProps} />;
   if (mode === "field") return <GridFour {...iconProps} />;
+  if (mode === "moire") return <IntersectThree {...iconProps} />;
   if (mode === "hatch") return <WaveSine {...iconProps} />;
-  return <GlobeHemisphereWest {...iconProps} />;
+  if (mode === "globe") return <GlobeHemisphereWest {...iconProps} />;
+  return <Lifebuoy {...iconProps} />;
 }
 
 function randomizedSettings(current: Settings): Settings {
@@ -1363,6 +1973,19 @@ function randomizedSettings(current: Settings): Settings {
     bandPhase: fixed(0.2 + Math.random() * 1.5),
     aspect: fixed(0.72 + Math.random() * 0.56),
     rotation: Math.floor(-24 + Math.random() * 49),
+    spiroType: Math.random() > 0.5 ? "hypotrochoid" : "epitrochoid",
+    spiroFixedRadius: 58 + Math.floor(Math.random() * 83),
+    spiroRollingRadius: 17 + Math.floor(Math.random() * 46),
+    spiroPenOffset: 24 + Math.floor(Math.random() * 101),
+    spiroScale: 230 + Math.floor(Math.random() * 141),
+    spiroLayers: 1 + Math.floor(Math.random() * 4),
+    spiroLayerRotation: fixed(Math.random() * 12),
+    borderLayers: 4 + Math.floor(Math.random() * 11),
+    borderMargin: 46 + Math.floor(Math.random() * 91),
+    borderSpacing: fixed(3 + Math.random() * 10),
+    borderAmplitude: 2 + Math.floor(Math.random() * 19),
+    borderFrequency: 12 + Math.floor(Math.random() * 41),
+    borderRoundness: fixed(2 + Math.random() * 8),
     tubeWidth: 180 + Math.floor(Math.random() * 151),
     tubeThreads: 10 + Math.floor(Math.random() * 11),
     tubeTwist: fixed(3 + Math.random() * 5),
@@ -1372,6 +1995,11 @@ function randomizedSettings(current: Settings): Settings {
     fieldDensity: 20 + Math.floor(Math.random() * 37),
     fieldScale: fixed(0.55 + Math.random() * 1.25),
     fieldDrift: fixed(0.12 + Math.random() * 0.62),
+    moireType: Math.random() > 0.5 ? "linear" : "radial",
+    moireSpacing: fixed(5 + Math.random() * 17),
+    moireAngle: fixed(1 + Math.random() * 24),
+    moireOffset: fixed(Math.random() * 121),
+    moirePhase: fixed(Math.random()),
     hatchHeight: 24 + Math.floor(Math.random() * 117),
     hatchLength: 110 + Math.floor(Math.random() * 331),
     hatchSpacing: fixed(4 + Math.random() * 13),
@@ -1388,6 +2016,13 @@ function randomizedSettings(current: Settings): Settings {
     globeNodeShape: ["circle", "triangle", "diamond"][
       Math.floor(Math.random() * 3)
     ] as GlobeNodeShape,
+    torusMajorRadius: 175 + Math.floor(Math.random() * 111),
+    torusMinorRadius: 48 + Math.floor(Math.random() * 93),
+    torusMajorSegments: 18 + Math.floor(Math.random() * 31),
+    torusMinorSegments: 8 + Math.floor(Math.random() * 15),
+    torusYaw: Math.floor(-180 + Math.random() * 361),
+    torusTilt: Math.floor(-70 + Math.random() * 141),
+    torusRoll: Math.floor(-90 + Math.random() * 181),
     lineWeight:
       current.mode === "hatch"
         ? fixed(Math.round((0.35 + Math.random() * 5.65) * 20) / 20)
@@ -1433,6 +2068,15 @@ export default function Home() {
   const globeVisibleNodeCount = Math.round(
     globeVertexCount * (settings.globeNodeAmount / 100),
   );
+  const torusVertexCount =
+    settings.torusMajorSegments * settings.torusMinorSegments;
+  const torusEdgeCount = torusVertexCount * 2;
+  const torusVisibleNodeCount = Math.round(
+    torusVertexCount * (settings.globeNodeAmount / 100),
+  );
+  const spiroClosureTurns =
+    settings.spiroRollingRadius /
+    gcd(settings.spiroFixedRadius, settings.spiroRollingRadius);
 
   const flash = (message: string) => {
     setNotice(message);
@@ -1488,7 +2132,15 @@ export default function Home() {
         ? `${settings.hatchHeight}x${settings.hatchLength}`
         : settings.mode === "globe"
           ? `detail-${settings.globeDetail}`
-        : `${settings.nodes}-${settings.divisor}`;
+          : settings.mode === "torus"
+            ? `${settings.torusMajorSegments}x${settings.torusMinorSegments}`
+            : settings.mode === "spirograph"
+              ? `${settings.spiroFixedRadius}-${settings.spiroRollingRadius}`
+              : settings.mode === "border"
+                ? `${settings.borderLayers}-${settings.borderFrequency}`
+                : settings.mode === "moire"
+                  ? `${settings.moireType}-${settings.moireSpacing}`
+                  : `${settings.nodes}-${settings.divisor}`;
     downloadBlob(
       new Blob([exportSvg], { type: "image/svg+xml;charset=utf-8" }),
       `guilloche-${settings.mode}-${geometryCode}-${settings.canvasRatio.replace(":", "x")}.svg`,
@@ -1539,51 +2191,100 @@ export default function Home() {
   };
 
   const modeCode =
-    settings.mode === "ribbon"
-      ? "T"
-      : settings.mode === "field"
-        ? "F"
-        : settings.mode === "hatch"
-          ? "H"
-          : settings.mode === "globe"
-            ? "G"
-          : "R";
+    ({
+      medallion: "R",
+      spirograph: "S",
+      border: "B",
+      ribbon: "T",
+      field: "F",
+      moire: "M",
+      hatch: "H",
+      globe: "G",
+      torus: "O",
+    } satisfies Record<PatternMode, string>)[settings.mode];
   const structureLabel =
-    settings.mode === "field"
-      ? `${paths.length.toLocaleString()} ENGRAVED LINES`
-      : settings.mode === "ribbon"
-        ? `${settings.tubeThreads} × 2 HELICAL THREADS`
-        : settings.mode === "hatch"
-          ? `${paths.length.toLocaleString()} PARALLEL WAVES`
-          : settings.mode === "globe"
-            ? `${globeEdgeCount.toLocaleString()} EDGES · ${globeVisibleNodeCount.toLocaleString()} NODES`
-        : `${settings.bands} ${settings.bands === 1 ? "STRAND" : "STRANDS"}`;
+    settings.mode === "spirograph"
+      ? `${settings.spiroLayers} CLOSED CURVES · ${spiroClosureTurns} TURNS`
+      : settings.mode === "border"
+        ? `${settings.borderLayers} WOVEN FRAMES`
+        : settings.mode === "field"
+          ? `${paths.length.toLocaleString()} ENGRAVED LINES`
+          : settings.mode === "ribbon"
+            ? `${settings.tubeThreads} × 2 HELICAL THREADS`
+            : settings.mode === "moire"
+              ? `${paths.length.toLocaleString()} INTERFERENCE LINES`
+              : settings.mode === "hatch"
+                ? `${paths.length.toLocaleString()} PARALLEL WAVES`
+                : settings.mode === "globe"
+                  ? `${globeEdgeCount.toLocaleString()} EDGES · ${globeVisibleNodeCount.toLocaleString()} NODES`
+                  : settings.mode === "torus"
+                    ? `${torusEdgeCount.toLocaleString()} EDGES · ${torusVisibleNodeCount.toLocaleString()} NODES`
+                    : `${settings.bands} ${settings.bands === 1 ? "STRAND" : "STRANDS"}`;
   const formula =
-    settings.mode === "ribbon"
-      ? {
-          symbol: "p(u)",
-          expression: "centerline(u) + normal(u) × weave(u)",
-        }
-      : settings.mode === "field"
-        ? {
-            symbol: "yᵢ(x)",
-            expression: "rowᵢ + wave₁(x) + wave₂(x) + driftᵢ",
-          }
-        : settings.mode === "hatch"
-          ? {
-              symbol: "yᵢ(x)",
-              expression:
-                "i·spacing + (height ÷ 2) sin(2πx ÷ length + phase)",
-            }
-          : settings.mode === "globe"
-            ? {
-                symbol: "p̂",
-                expression: "project(shared icosphere vertices) → edges + nodes",
-              }
-        : {
-            symbol: "r(t)",
-            expression: "mid + sin(t × nodes ÷ divisor) × range",
-          };
+    ({
+      medallion: {
+        symbol: "r(t)",
+        expression: "mid + sin(t × nodes ÷ divisor) × range",
+      },
+      spirograph: {
+        symbol: "p(t)",
+        expression: "trochoid(R, r, d), closed at 2πr ÷ gcd(R,r)",
+      },
+      border: {
+        symbol: "s(t)",
+        expression: "superellipse(t) + normal(t) × sin(kt + phase)",
+      },
+      ribbon: {
+        symbol: "p(u)",
+        expression: "centerline(u) + normal(u) × weave(u)",
+      },
+      field: {
+        symbol: "yᵢ(x)",
+        expression: "rowᵢ + wave₁(x) + wave₂(x) + driftᵢ",
+      },
+      moire: {
+        symbol: "M",
+        expression: "family₁(θ,s) ∪ family₂(θ+Δ,s+phase)",
+      },
+      hatch: {
+        symbol: "yᵢ(x)",
+        expression: "i·spacing + (height ÷ 2) sin(2πx ÷ length + phase)",
+      },
+      globe: {
+        symbol: "p̂",
+        expression: "project(shared icosphere vertices) → edges + nodes",
+      },
+      torus: {
+        symbol: "p(u,v)",
+        expression: "((R+r cos v) cos u, r sin v, (R+r cos v) sin u)",
+      },
+    } satisfies Record<PatternMode, { symbol: string; expression: string }>)[
+      settings.mode
+    ];
+  const previewAriaLabel =
+    ({
+      medallion: `medallion guilloché pattern with ${settings.nodes} nodes and divisor ${settings.divisor}`,
+      spirograph: `${settings.spiroType} spirograph with ${settings.spiroLayers} closed curve layers`,
+      border: `guilloché border with ${settings.borderLayers} woven frames and ${settings.borderFrequency} waves per frame`,
+      ribbon: `${settings.tubeStyle} guilloché with ${settings.tubeThreads} helical threads and ${settings.tubeTwist} turns`,
+      field: `background guilloché field with ${paths.length} engraved lines`,
+      moire: `${settings.moireType} moiré interference pattern with ${settings.moireSpacing} pixel spacing`,
+      hatch: `wave hatch with ${settings.hatchHeight} pixel height and ${settings.hatchLength} pixel wavelength`,
+      globe: `geodesic globe with subdivision detail ${settings.globeDetail} and ${globeVisibleNodeCount} marked nodes`,
+      torus: `parametric torus mesh with ${torusEdgeCount} edges and ${torusVisibleNodeCount} marked nodes`,
+    } satisfies Record<PatternMode, string>)[settings.mode];
+  const plateGeometry =
+    ({
+      medallion: `${settings.nodes}.${settings.divisor}`,
+      spirograph: `${settings.spiroFixedRadius}.${settings.spiroRollingRadius}`,
+      border: `${settings.borderLayers}.${settings.borderFrequency}`,
+      ribbon: `${settings.tubeThreads}.${settings.tubeTwist}`,
+      field: `${settings.fieldDensity}.${settings.nodes}`,
+      moire: `${settings.moireSpacing}.${settings.moireAngle}`,
+      hatch: `${settings.hatchHeight}.${settings.hatchLength}`,
+      globe: `D${settings.globeDetail}.${settings.globeRadius}`,
+      torus: `${settings.torusMajorSegments}.${settings.torusMinorSegments}`,
+    } satisfies Record<PatternMode, string>)[settings.mode];
 
   return (
     <main className="app-shell">
@@ -1707,6 +2408,104 @@ export default function Home() {
                 </>
               )}
 
+              {settings.mode === "spirograph" && (
+                <>
+                  <div className="segmented" aria-label="Spirograph type">
+                    <button
+                      type="button"
+                      className={
+                        settings.spiroType === "hypotrochoid" ? "is-active" : ""
+                      }
+                      onClick={() => update("spiroType", "hypotrochoid")}
+                    >
+                      Inner roll
+                    </button>
+                    <button
+                      type="button"
+                      className={
+                        settings.spiroType === "epitrochoid" ? "is-active" : ""
+                      }
+                      onClick={() => update("spiroType", "epitrochoid")}
+                    >
+                      Outer roll
+                    </button>
+                  </div>
+                  <RangeControl
+                    label="Fixed radius"
+                    value={settings.spiroFixedRadius}
+                    min={30}
+                    max={160}
+                    onChange={(value) => update("spiroFixedRadius", value)}
+                  />
+                  <RangeControl
+                    label="Rolling radius"
+                    value={settings.spiroRollingRadius}
+                    min={8}
+                    max={90}
+                    onChange={(value) => update("spiroRollingRadius", value)}
+                  />
+                  <RangeControl
+                    label="Pen offset"
+                    value={settings.spiroPenOffset}
+                    min={0}
+                    max={160}
+                    onChange={(value) => update("spiroPenOffset", value)}
+                  />
+                  <RangeControl
+                    label="Pattern size"
+                    value={settings.spiroScale}
+                    min={120}
+                    max={410}
+                    unit=" px"
+                    onChange={(value) => update("spiroScale", value)}
+                  />
+                  <RangeControl
+                    label="Curve layers"
+                    value={settings.spiroLayers}
+                    min={1}
+                    max={6}
+                    onChange={(value) => update("spiroLayers", value)}
+                  />
+                </>
+              )}
+
+              {settings.mode === "border" && (
+                <>
+                  <RangeControl
+                    label="Frame layers"
+                    value={settings.borderLayers}
+                    min={2}
+                    max={18}
+                    onChange={(value) => update("borderLayers", value)}
+                  />
+                  <RangeControl
+                    label="Canvas margin"
+                    value={settings.borderMargin}
+                    min={24}
+                    max={180}
+                    unit=" px"
+                    onChange={(value) => update("borderMargin", value)}
+                  />
+                  <RangeControl
+                    label="Layer spacing"
+                    value={settings.borderSpacing}
+                    min={2}
+                    max={18}
+                    step={0.5}
+                    unit=" px"
+                    onChange={(value) => update("borderSpacing", value)}
+                  />
+                  <RangeControl
+                    label="Corner roundness"
+                    value={settings.borderRoundness}
+                    min={2}
+                    max={12}
+                    step={0.1}
+                    onChange={(value) => update("borderRoundness", value)}
+                  />
+                </>
+              )}
+
               {settings.mode === "ribbon" && (
                 <>
                   <div className="segmented" aria-label="Ribbon profile">
@@ -1820,6 +2619,72 @@ export default function Home() {
                 </>
               )}
 
+              {settings.mode === "moire" && (
+                <>
+                  <div className="segmented" aria-label="Moiré family">
+                    <button
+                      type="button"
+                      className={
+                        settings.moireType === "linear" ? "is-active" : ""
+                      }
+                      onClick={() => update("moireType", "linear")}
+                    >
+                      Parallel lines
+                    </button>
+                    <button
+                      type="button"
+                      className={
+                        settings.moireType === "radial" ? "is-active" : ""
+                      }
+                      onClick={() => update("moireType", "radial")}
+                    >
+                      Concentric rings
+                    </button>
+                  </div>
+                  <RangeControl
+                    label="Family spacing"
+                    value={settings.moireSpacing}
+                    min={4}
+                    max={30}
+                    step={0.25}
+                    unit=" px"
+                    onChange={(value) => update("moireSpacing", value)}
+                  />
+                  {settings.moireType === "linear" && (
+                    <RangeControl
+                      label="Angle difference"
+                      value={settings.moireAngle}
+                      min={0.25}
+                      max={35}
+                      step={0.25}
+                      unit="°"
+                      onChange={(value) => update("moireAngle", value)}
+                    />
+                  )}
+                  <RangeControl
+                    label={
+                      settings.moireType === "linear"
+                        ? "Family offset"
+                        : "Center offset"
+                    }
+                    value={settings.moireOffset}
+                    min={0}
+                    max={180}
+                    step={0.5}
+                    unit=" px"
+                    onChange={(value) => update("moireOffset", value)}
+                  />
+                  <RangeControl
+                    label="Spacing phase"
+                    value={settings.moirePhase}
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    onChange={(value) => update("moirePhase", value)}
+                  />
+                </>
+              )}
+
               {settings.mode === "hatch" && (
                 <>
                   <RangeControl
@@ -1897,7 +2762,46 @@ export default function Home() {
                 </>
               )}
 
-              {settings.mode !== "globe" && (
+              {settings.mode === "torus" && (
+                <>
+                  <RangeControl
+                    label="Major radius"
+                    value={settings.torusMajorRadius}
+                    min={120}
+                    max={300}
+                    unit=" px"
+                    onChange={(value) => update("torusMajorRadius", value)}
+                  />
+                  <RangeControl
+                    label="Tube radius"
+                    value={settings.torusMinorRadius}
+                    min={30}
+                    max={160}
+                    unit=" px"
+                    onChange={(value) => update("torusMinorRadius", value)}
+                  />
+                  <RangeControl
+                    label="Ring segments"
+                    value={settings.torusMajorSegments}
+                    min={12}
+                    max={64}
+                    onChange={(value) => update("torusMajorSegments", value)}
+                  />
+                  <RangeControl
+                    label="Tube segments"
+                    value={settings.torusMinorSegments}
+                    min={6}
+                    max={32}
+                    onChange={(value) => update("torusMinorSegments", value)}
+                  />
+                  <div className="math-note is-good">
+                    <span>Exact parametric torus</span>
+                    <small>Every seam wraps to the same shared vertex</small>
+                  </div>
+                </>
+              )}
+
+              {settings.mode !== "globe" && settings.mode !== "torus" && (
                 <RangeControl
                   label="Rotation"
                   value={settings.rotation}
@@ -1912,7 +2816,17 @@ export default function Home() {
 
           <details className="control-section" open>
             <summary>
-              <span>{settings.mode === "globe" ? "Projection" : "Weave"}</span>
+              <span>
+                {settings.mode === "globe" || settings.mode === "torus"
+                  ? "Projection"
+                  : settings.mode === "spirograph"
+                    ? "Closure"
+                    : settings.mode === "border"
+                      ? "Wave"
+                      : settings.mode === "moire"
+                        ? "Interference"
+                        : "Weave"}
+              </span>
               <span className="summary-mark" aria-hidden="true">
                 <CaretDown size={13} weight="bold" />
               </span>
@@ -1981,6 +2895,94 @@ export default function Home() {
                     <small>Front is solid; rear uses one shared opacity</small>
                   </div>
                 </>
+              ) : settings.mode === "torus" ? (
+                <>
+                  <RangeControl
+                    label="Yaw"
+                    value={settings.torusYaw}
+                    min={-180}
+                    max={180}
+                    unit="°"
+                    onChange={(value) => update("torusYaw", value)}
+                  />
+                  <RangeControl
+                    label="Tilt"
+                    value={settings.torusTilt}
+                    min={-90}
+                    max={90}
+                    unit="°"
+                    onChange={(value) => update("torusTilt", value)}
+                  />
+                  <RangeControl
+                    label="Roll"
+                    value={settings.torusRoll}
+                    min={-180}
+                    max={180}
+                    unit="°"
+                    onChange={(value) => update("torusRoll", value)}
+                  />
+                  <RangeControl
+                    label="Rear mesh opacity"
+                    value={settings.globeBackOpacity}
+                    min={0}
+                    max={0.6}
+                    step={0.01}
+                    onChange={(value) => update("globeBackOpacity", value)}
+                  />
+                  <div className="math-note is-good">
+                    <span>Two opacity groups</span>
+                    <small>Front is solid; rear uses one shared opacity</small>
+                  </div>
+                </>
+              ) : settings.mode === "spirograph" ? (
+                <>
+                  <RangeControl
+                    label="Layer rotation"
+                    value={settings.spiroLayerRotation}
+                    min={0}
+                    max={30}
+                    step={0.25}
+                    unit="°"
+                    onChange={(value) => update("spiroLayerRotation", value)}
+                  />
+                  <div className="math-note is-good">
+                    <span>{spiroClosureTurns} exact turns</span>
+                    <small>
+                      Radius ratio closes every curve without a seam
+                    </small>
+                  </div>
+                </>
+              ) : settings.mode === "border" ? (
+                <>
+                  <RangeControl
+                    label="Wave amplitude"
+                    value={settings.borderAmplitude}
+                    min={0}
+                    max={32}
+                    unit=" px"
+                    onChange={(value) => update("borderAmplitude", value)}
+                  />
+                  <RangeControl
+                    label="Waves per frame"
+                    value={settings.borderFrequency}
+                    min={4}
+                    max={72}
+                    onChange={(value) => update("borderFrequency", value)}
+                  />
+                  <div className="math-note is-good">
+                    <span>Normal-offset weave</span>
+                    <small>Amplitude stays perpendicular around every corner</small>
+                  </div>
+                </>
+              ) : settings.mode === "moire" ? (
+                <div className="math-note is-good">
+                  <span>Two exact families</span>
+                  <small>
+                    {settings.moireType === "linear"
+                      ? "Parallel vectors differ only by angle and phase"
+                      : "Every ring shares constant radial spacing"}
+                  </small>
+                </div>
               ) : (
                 <>
                   <RangeControl
@@ -2021,7 +3023,9 @@ export default function Home() {
                   </div>
                 </>
               )}
-              {settings.mode !== "globe" && (
+              {settings.mode !== "globe" &&
+                settings.mode !== "torus" &&
+                settings.mode !== "moire" && (
                 <RangeControl
                   label="Global phase"
                   value={settings.phase}
@@ -2031,7 +3035,11 @@ export default function Home() {
                   onChange={(value) => update("phase", value)}
                 />
               )}
-              {settings.mode !== "hatch" && settings.mode !== "globe" && (
+              {settings.mode !== "hatch" &&
+                settings.mode !== "globe" &&
+                settings.mode !== "torus" &&
+                settings.mode !== "moire" &&
+                settings.mode !== "spirograph" && (
                 <RangeControl
                   label="Strand offset"
                   value={settings.bandPhase}
@@ -2044,7 +3052,7 @@ export default function Home() {
             </div>
           </details>
 
-          {settings.mode === "globe" && (
+          {(settings.mode === "globe" || settings.mode === "torus") && (
             <details className="control-section" open>
               <summary>
                 <span>Nodes</span>
@@ -2156,17 +3164,27 @@ export default function Home() {
                   </button>
                 </div>
                 <div className="math-note is-good">
-                  <span>{globeVisibleNodeCount} marked vertices</span>
+                  <span>
+                    {settings.mode === "globe"
+                      ? globeVisibleNodeCount
+                      : torusVisibleNodeCount}{" "}
+                    marked vertices
+                  </span>
                   <small>
-                    Selected deterministically from {globeVertexCount} shared
-                    corners
+                    Selected deterministically from{" "}
+                    {settings.mode === "globe"
+                      ? globeVertexCount
+                      : torusVertexCount}{" "}
+                    shared corners
                   </small>
                 </div>
               </div>
             </details>
           )}
 
-          {settings.mode !== "hatch" && settings.mode !== "globe" && (
+          {(settings.mode === "medallion" ||
+            settings.mode === "ribbon" ||
+            settings.mode === "field") && (
             <details className="control-section">
               <summary>
                 <span>
@@ -2303,7 +3321,7 @@ export default function Home() {
                   onChange={(value) => update("lineWeight", value)}
                 />
               )}
-              {settings.mode !== "globe" && (
+              {settings.mode !== "globe" && settings.mode !== "torus" && (
                 <RangeControl
                   label="Ink opacity"
                   value={settings.opacity}
@@ -2313,7 +3331,9 @@ export default function Home() {
                   onChange={(value) => update("opacity", value)}
                 />
               )}
-              {settings.mode !== "globe" && (
+              {settings.mode !== "globe" &&
+                settings.mode !== "torus" &&
+                settings.mode !== "moire" && (
                 <label className="select-control">
                   <span>Vector detail</span>
                   <select
@@ -2380,15 +3400,7 @@ export default function Home() {
                 height={canvasHeight}
                 shapeRendering="geometricPrecision"
                 role="img"
-                aria-label={
-                  settings.mode === "ribbon"
-                    ? `${settings.tubeStyle} guilloché with ${settings.tubeThreads} helical threads and ${settings.tubeTwist} turns`
-                    : settings.mode === "hatch"
-                      ? `wave hatch with ${settings.hatchHeight} pixel height and ${settings.hatchLength} pixel wavelength`
-                      : settings.mode === "globe"
-                        ? `geodesic globe with subdivision detail ${settings.globeDetail} and ${globeVisibleNodeCount} marked nodes`
-                    : `${settings.mode} guilloché pattern with ${settings.nodes} nodes and divisor ${settings.divisor}`
-                }
+                aria-label={previewAriaLabel}
               >
                 <defs>
                   <clipPath id="preview-plate">
@@ -2447,12 +3459,7 @@ export default function Home() {
             </div>
             <div className="plate-caption">
               <span>
-                PLATE {modeCode}-
-                {settings.mode === "hatch"
-                  ? `${settings.hatchHeight}.${settings.hatchLength}`
-                  : settings.mode === "globe"
-                    ? `D${settings.globeDetail}.${settings.globeRadius}`
-                  : `${settings.nodes}.${settings.divisor}`}
+                PLATE {modeCode}-{plateGeometry}
               </span>
               <span>
                 {structureLabel}
