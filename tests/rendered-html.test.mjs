@@ -42,10 +42,7 @@ test("renders the guilloche studio", async () => {
   assert.match(html, /Treasury/);
   assert.match(html, /Rosette/);
   assert.doesNotMatch(html, /Reference Hatch/);
-  assert.match(html, /Canvas aspect ratio/);
   assert.match(html, /1:1/);
-  assert.match(html, /3:2/);
-  assert.match(html, /16:9/);
   assert.match(html, /Background/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/);
 });
@@ -64,6 +61,8 @@ test("uses a Figma-style floating tool dock and contextual left inspector", asyn
   assert.match(source, /className="tool-dock"/);
   assert.match(source, /className="controls-panel"/);
   assert.doesNotMatch(source, /className="construction-panel"/);
+  assert.doesNotMatch(source, /Canvas aspect ratio|chooseCanvasRatio/);
+  assert.doesNotMatch(source, /geometry loaded|field loaded|hatch loaded|globe loaded/i);
   assert.match(styles, /\.tool-dock[\s\S]*position: absolute/);
   assert.match(styles, /\.tool-button\.is-active[\s\S]*background: #ededed/);
 });

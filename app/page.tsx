@@ -13,7 +13,6 @@ import { Check } from "@phosphor-icons/react/Check";
 import { CirclesThree } from "@phosphor-icons/react/CirclesThree";
 import { CopySimple } from "@phosphor-icons/react/CopySimple";
 import { DownloadSimple } from "@phosphor-icons/react/DownloadSimple";
-import { FrameCorners } from "@phosphor-icons/react/FrameCorners";
 import { GlobeHemisphereWest } from "@phosphor-icons/react/GlobeHemisphereWest";
 import { GridFour } from "@phosphor-icons/react/GridFour";
 import { WaveSine } from "@phosphor-icons/react/WaveSine";
@@ -1448,11 +1447,6 @@ export default function Home() {
     );
   };
 
-  const chooseCanvasRatio = (canvasRatio: CanvasRatio) => {
-    setSettings((current) => ({ ...current, canvasRatio }));
-    flash(`${canvasRatio} canvas loaded.`);
-  };
-
   const choosePreset = (preset: Preset) => {
     setSettings((current) =>
       withSafeHatchThickness({
@@ -1476,17 +1470,6 @@ export default function Home() {
         canvasRatio: current.canvasRatio,
         mode,
       }),
-    );
-    flash(
-      mode === "ribbon"
-        ? "Ribbon geometry loaded."
-        : mode === "field"
-          ? "Background field loaded."
-          : mode === "hatch"
-            ? "Precision wave hatch loaded."
-            : mode === "globe"
-              ? "Geodesic globe loaded."
-          : "Radial geometry loaded.",
     );
   };
 
@@ -2356,23 +2339,6 @@ export default function Home() {
               <h2>
                 {activePreset === "Custom" ? "Custom study" : activePreset}
               </h2>
-            </div>
-            <div className="canvas-control">
-              <FrameCorners size={15} weight="regular" aria-hidden="true" />
-              <div className="ratio-buttons" aria-label="Canvas aspect ratio">
-                {(Object.keys(canvasSizes) as CanvasRatio[]).map((ratio) => (
-                  <button
-                    type="button"
-                    key={ratio}
-                    className={settings.canvasRatio === ratio ? "is-active" : ""}
-                    aria-pressed={settings.canvasRatio === ratio}
-                    title={canvasSizes[ratio].label}
-                    onClick={() => chooseCanvasRatio(ratio)}
-                  >
-                    {ratio}
-                  </button>
-                ))}
-              </div>
             </div>
           </div>
 

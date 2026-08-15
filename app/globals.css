@@ -434,8 +434,7 @@ input[type="range"]::-moz-range-thumb {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.segmented button,
-.ratio-buttons button {
+.segmented button {
   border: 0;
   transition:
     background-color 140ms var(--ease-out),
@@ -522,7 +521,7 @@ input[type="color"]:disabled {
 .preview-toolbar {
   align-items: center;
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   min-height: 56px;
 }
 
@@ -531,35 +530,6 @@ input[type="color"]:disabled {
   font-weight: 560;
   letter-spacing: -0.012em;
   margin: 3px 0 0;
-}
-
-.canvas-control {
-  align-items: center;
-  color: var(--quiet);
-  display: flex;
-  gap: 7px;
-}
-
-.ratio-buttons {
-  background: #1d1d1d;
-  border-radius: 7px;
-  display: flex;
-  padding: 3px;
-}
-
-.ratio-buttons button {
-  background: transparent;
-  border-radius: 5px;
-  color: var(--quiet);
-  font-family: var(--font-mono);
-  font-size: 8px;
-  min-width: 37px;
-  padding: 6px;
-}
-
-.ratio-buttons button.is-active {
-  background: var(--surface-active);
-  color: var(--text);
 }
 
 .tool-dock {
@@ -897,11 +867,6 @@ input[type="color"]:disabled {
 
   .preview-title h2 {
     margin: 0;
-  }
-
-  .ratio-buttons button {
-    min-width: 34px;
-    padding-inline: 4px;
   }
 
   .artboard {
