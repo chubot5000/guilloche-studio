@@ -7,6 +7,17 @@ import {
   useState,
   type CSSProperties,
 } from "react";
+import { ArrowsClockwise } from "@phosphor-icons/react/ArrowsClockwise";
+import { CaretDown } from "@phosphor-icons/react/CaretDown";
+import { Check } from "@phosphor-icons/react/Check";
+import { CirclesThree } from "@phosphor-icons/react/CirclesThree";
+import { CopySimple } from "@phosphor-icons/react/CopySimple";
+import { DownloadSimple } from "@phosphor-icons/react/DownloadSimple";
+import { FrameCorners } from "@phosphor-icons/react/FrameCorners";
+import { GlobeHemisphereWest } from "@phosphor-icons/react/GlobeHemisphereWest";
+import { GridFour } from "@phosphor-icons/react/GridFour";
+import { WaveSine } from "@phosphor-icons/react/WaveSine";
+import { Waves } from "@phosphor-icons/react/Waves";
 
 type ColorMode = "single" | "layered";
 type PatternMode = "medallion" | "ribbon" | "field" | "hatch" | "globe";
@@ -1324,6 +1335,15 @@ function RangeControl({
   );
 }
 
+function ModeIcon({ mode }: { mode: PatternMode }) {
+  const iconProps = { size: 20, weight: "regular" as const };
+  if (mode === "medallion") return <CirclesThree {...iconProps} />;
+  if (mode === "ribbon") return <Waves {...iconProps} />;
+  if (mode === "field") return <GridFour {...iconProps} />;
+  if (mode === "hatch") return <WaveSine {...iconProps} />;
+  return <GlobeHemisphereWest {...iconProps} />;
+}
+
 function randomizedSettings(current: Settings): Settings {
   const divisors = [17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67];
   const divisor = divisors[Math.floor(Math.random() * divisors.length)];
@@ -1589,10 +1609,7 @@ export default function Home() {
           <span className="brand-mark" aria-hidden="true">
             R
           </span>
-          <span>
-            <strong>Rouletté</strong>
-            <small>Guilloché studio</small>
-          </span>
+          <strong>Rouletté</strong>
         </a>
         <div className="topbar-context" aria-live="polite">
           <span>{activeModeOption?.label}</span>
@@ -1601,51 +1618,46 @@ export default function Home() {
           </strong>
         </div>
         <div className="topbar-actions">
-          <button className="secondary-button" type="button" onClick={copySvg}>
-            Copy SVG
+          <button
+            className="secondary-button icon-label-button"
+            type="button"
+            onClick={copySvg}
+          >
+            <CopySimple size={16} weight="regular" aria-hidden="true" />
+            Copy
           </button>
-          <button className="primary-button" type="button" onClick={downloadSvg}>
-            Export SVG <span aria-hidden="true">↓</span>
+          <button
+            className="primary-button icon-label-button"
+            type="button"
+            onClick={downloadSvg}
+          >
+            <DownloadSimple size={16} weight="bold" aria-hidden="true" />
+            Export SVG
           </button>
         </div>
       </header>
 
       <div className="studio-grid" id="top">
-        <nav className="construction-panel" aria-label="Pattern construction">
-          <section className="intro">
-            <span className="section-kicker">Vector pattern instrument</span>
-            <h1>Build precision patterns.</h1>
-            <p>Shape mathematically exact linework and export clean vectors.</p>
-          </section>
-
-          <section className="rail-section mode-section">
-            <div className="section-heading">
-              <h2>Construction</h2>
+        <aside className="controls-panel" aria-label="Pattern controls">
+          <header className="inspector-header">
+            <div>
+              <span>Properties</span>
+              <h2>{activeModeOption?.label}</h2>
             </div>
-            <div className="mode-grid">
-              {modeOptions.map((option) => (
-                <button
-                  type="button"
-                  key={option.mode}
-                  className={`mode-card ${
-                    settings.mode === option.mode ? "is-active" : ""
-                  }`}
-                  onClick={() => chooseMode(option.mode)}
-                  aria-pressed={settings.mode === option.mode}
-                >
-                  <strong>{option.label}</strong>
-                  <small>{option.note}</small>
-                </button>
-              ))}
-            </div>
-          </section>
+            <button
+              className="inspector-action"
+              type="button"
+              onClick={randomize}
+              aria-label="Randomize pattern"
+              title="Randomize"
+            >
+              <ArrowsClockwise size={17} weight="regular" aria-hidden="true" />
+            </button>
+          </header>
 
-          <section className="rail-section preset-section">
+          <nav className="preset-section" aria-label="Starting plate">
             <div className="section-heading">
-              <h2>Starting plate</h2>
-              <button className="text-button" type="button" onClick={randomize}>
-                Randomize
-              </button>
+              <h3>Starting plate</h3>
             </div>
             <div className="preset-grid">
               {activePresets.map((preset) => (
@@ -1656,26 +1668,25 @@ export default function Home() {
                     activePreset === preset.name ? "is-active" : ""
                   }`}
                   onClick={() => choosePreset(preset)}
+                  aria-pressed={activePreset === preset.name}
                 >
-                  <strong>{preset.name}</strong>
-                  <small>{preset.note}</small>
+                  <span>
+                    <strong>{preset.name}</strong>
+                    <small>{preset.note}</small>
+                  </span>
+                  {activePreset === preset.name && (
+                    <Check size={14} weight="bold" aria-hidden="true" />
+                  )}
                 </button>
               ))}
             </div>
-          </section>
-        </nav>
-
-        <aside className="controls-panel" aria-label="Pattern controls">
-          <header className="inspector-header">
-            <span>Parameters</span>
-            <h2>{activeModeOption?.label}</h2>
-          </header>
+          </nav>
 
           <details className="control-section" open>
             <summary>
               <span>Structure</span>
               <span className="summary-mark" aria-hidden="true">
-                +
+                <CaretDown size={13} weight="bold" />
               </span>
             </summary>
             <div className="control-stack">
@@ -1920,7 +1931,7 @@ export default function Home() {
             <summary>
               <span>{settings.mode === "globe" ? "Projection" : "Weave"}</span>
               <span className="summary-mark" aria-hidden="true">
-                +
+                <CaretDown size={13} weight="bold" />
               </span>
             </summary>
             <div className="control-stack">
@@ -2055,7 +2066,7 @@ export default function Home() {
               <summary>
                 <span>Nodes</span>
                 <span className="summary-mark" aria-hidden="true">
-                  +
+                  <CaretDown size={13} weight="bold" />
                 </span>
               </summary>
               <div className="control-stack">
@@ -2183,7 +2194,7 @@ export default function Home() {
                       : "Boundaries"}
                 </span>
                 <span className="summary-mark" aria-hidden="true">
-                  +
+                  <CaretDown size={13} weight="bold" />
                 </span>
               </summary>
               <div className="control-stack">
@@ -2223,7 +2234,7 @@ export default function Home() {
             <summary>
               <span>Finish</span>
               <span className="summary-mark" aria-hidden="true">
-                +
+                <CaretDown size={13} weight="bold" />
               </span>
             </summary>
             <div className="control-stack">
@@ -2347,7 +2358,7 @@ export default function Home() {
               </h2>
             </div>
             <div className="canvas-control">
-              <span>Canvas</span>
+              <FrameCorners size={15} weight="regular" aria-hidden="true" />
               <div className="ratio-buttons" aria-label="Canvas aspect ratio">
                 {(Object.keys(canvasSizes) as CanvasRatio[]).map((ratio) => (
                   <button
@@ -2364,6 +2375,24 @@ export default function Home() {
               </div>
             </div>
           </div>
+
+          <nav className="tool-dock" aria-label="Pattern construction tools">
+            {modeOptions.map((option) => (
+              <button
+                type="button"
+                key={option.mode}
+                className={`tool-button ${
+                  settings.mode === option.mode ? "is-active" : ""
+                }`}
+                onClick={() => chooseMode(option.mode)}
+                aria-pressed={settings.mode === option.mode}
+                aria-label={option.label}
+                data-tooltip={option.label}
+              >
+                <ModeIcon mode={option.mode} />
+              </button>
+            ))}
+          </nav>
 
           <div className="artboard-frame">
             <div className="registration registration-top">
@@ -2470,8 +2499,13 @@ export default function Home() {
               <span>{formula.symbol}</span>
               <code>{formula.expression}</code>
             </div>
-            <button className="png-button" type="button" onClick={downloadPng}>
-              Download {pngWidth} × 2400 PNG
+            <button
+              className="png-button icon-label-button"
+              type="button"
+              onClick={downloadPng}
+            >
+              <DownloadSimple size={15} weight="regular" aria-hidden="true" />
+              PNG {pngWidth} × 2400
             </button>
           </div>
         </section>

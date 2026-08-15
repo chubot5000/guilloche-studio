@@ -30,10 +30,10 @@ test("renders the guilloche studio", async () => {
 
   const html = await response.text();
   assert.match(html, /<title>Rouletté \| Guilloché Pattern Studio<\/title>/i);
-  assert.match(html, /Build precision patterns/);
+  assert.match(html, /Rouletté/);
   assert.match(html, /Export SVG/);
-  assert.match(html, /Pattern construction/);
-  assert.match(html, /Parameters/);
+  assert.match(html, /Pattern construction tools/);
+  assert.match(html, /Properties/);
   assert.match(html, /Starting plate/);
   assert.match(html, /Live plate/);
   assert.match(html, /Ribbon \/ tube/);
@@ -48,6 +48,24 @@ test("renders the guilloche studio", async () => {
   assert.match(html, /16:9/);
   assert.match(html, /Background/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/);
+});
+
+test("uses a Figma-style floating tool dock and contextual left inspector", async () => {
+  const source = await readFile(
+    new URL("../app/page.tsx", import.meta.url),
+    "utf8",
+  );
+  const styles = await readFile(
+    new URL("../app/globals.css", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /@phosphor-icons\/react/);
+  assert.match(source, /className="tool-dock"/);
+  assert.match(source, /className="controls-panel"/);
+  assert.doesNotMatch(source, /className="construction-panel"/);
+  assert.match(styles, /\.tool-dock[\s\S]*position: absolute/);
+  assert.match(styles, /\.tool-button\.is-active[\s\S]*background: #ededed/);
 });
 
 test("includes deterministic globe intersection controls", async () => {
