@@ -1,5 +1,6 @@
 "use client";
 
+import NextImage from "next/image";
 import {
   useDeferredValue,
   useMemo,
@@ -2290,10 +2291,15 @@ export default function Home() {
     <main className="app-shell">
       <header className="topbar">
         <a className="brand" href="#top" aria-label="Rouletté home">
-          <span className="brand-mark" aria-hidden="true">
-            R
-          </span>
-          <strong>Rouletté</strong>
+          <NextImage
+            className="brand-logo"
+            src="/roulette-logo.svg"
+            alt=""
+            width={112}
+            height={30}
+            priority
+            aria-hidden="true"
+          />
         </a>
         <div className="topbar-context" aria-live="polite">
           <span>{activeModeOption?.label}</span>

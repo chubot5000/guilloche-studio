@@ -85,31 +85,15 @@ button:active {
 
 .brand {
   align-items: center;
-  color: var(--text);
   display: inline-flex;
-  gap: 9px;
   justify-self: start;
   text-decoration: none;
 }
 
-.brand-mark {
-  align-items: center;
-  background: #f0f0f0;
-  border-radius: 7px;
-  color: #1d1d1d;
-  display: flex;
-  font-size: 14px;
-  font-weight: 760;
-  height: 28px;
-  justify-content: center;
-  letter-spacing: -0.04em;
-  width: 28px;
-}
-
-.brand strong {
-  font-size: 13px;
-  font-weight: 620;
-  letter-spacing: -0.015em;
+.brand-logo {
+  display: block;
+  height: 30px;
+  width: auto;
 }
 
 .topbar-context {
@@ -848,7 +832,6 @@ input[type="color"]:disabled {
     padding-inline: 9px;
   }
 
-  .brand strong,
   .topbar-actions .secondary-button {
     display: none;
   }
