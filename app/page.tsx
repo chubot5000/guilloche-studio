@@ -2035,7 +2035,7 @@ export default function Home() {
   const [settings, setSettings] = useState<Settings>(baseSettings);
   const [activePreset, setActivePreset] = useState("Treasury");
   const [notice, setNotice] = useState("");
-  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const noticeTimer = useRef<number | null>(null);
   const renderSettings = useDeferredValue(settings);
   const previewSettings = useMemo(
     () => ({
