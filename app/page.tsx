@@ -2,6 +2,7 @@
 
 import NextImage from "next/image";
 import {
+  useEffect,
   useDeferredValue,
   useMemo,
   useRef,
@@ -20,6 +21,10 @@ import { GlobeHemisphereWest } from "@phosphor-icons/react/GlobeHemisphereWest";
 import { GridFour } from "@phosphor-icons/react/GridFour";
 import { IntersectThree } from "@phosphor-icons/react/IntersectThree";
 import { Lifebuoy } from "@phosphor-icons/react/Lifebuoy";
+import { Pause } from "@phosphor-icons/react/Pause";
+import { Play } from "@phosphor-icons/react/Play";
+import { Record } from "@phosphor-icons/react/Record";
+import { FileJs } from "@phosphor-icons/react/FileJs";
 import { WaveSine } from "@phosphor-icons/react/WaveSine";
 import { Waves } from "@phosphor-icons/react/Waves";
 
@@ -38,6 +43,7 @@ type TubeStyle = "ribbon" | "tube";
 type CanvasRatio = "1:1" | "3:2" | "16:9";
 type GlobeNodeStyle = "filled" | "stroked";
 type GlobeNodeShape = "circle" | "triangle" | "diamond";
+type GlobeSpinDirection = 1 | -1;
 type SpiroType = "hypotrochoid" | "epitrochoid";
 type MoireType = "linear" | "radial";
 
@@ -94,6 +100,10 @@ type Settings = {
   globeYaw: number;
   globeTilt: number;
   globeRoll: number;
+  globeSpinAxisTilt: number;
+  globeSpinAxisHeading: number;
+  globeSpinSpeed: number;
+  globeSpinDirection: GlobeSpinDirection;
   globeBackOpacity: number;
   globeNodeAmount: number;
   globeNodeSize: number;
@@ -229,6 +239,10 @@ const baseSettings: Settings = {
   globeYaw: -12,
   globeTilt: -8,
   globeRoll: 2,
+  globeSpinAxisTilt: 0,
+  globeSpinAxisHeading: 0,
+  globeSpinSpeed: 10,
+  globeSpinDirection: 1,
   globeBackOpacity: 0.13,
   globeNodeAmount: 0,
   globeNodeSize: 4,
@@ -1337,6 +1351,169 @@ function rotateVector(
   };
 }
 
+type GlobeGeometry = {
+  vertices: Vector3[];
+  edges: Array<[number, number]>;
+};
+
+const globeGeometryCache = new Map<number, GlobeGeometry>();
+
+function globeGeometry(detail: number): GlobeGeometry {
+  const cached = globeGeometryCache.get(detail);
+  if (cached) return cached;
+
+  const golden = (1 + Math.sqrt(5)) / 2;
+  const vertices: Vector3[] = [
+    { x: -1, y: golden, z: 0 },
+    { x: 1, y: golden, z: 0 },
+    { x: -1, y: -golden, z: 0 },
+    { x: 1, y: -golden, z: 0 },
+    { x: 0, y: -1, z: golden },
+    { x: 0, y: 1, z: golden },
+    { x: 0, y: -1, z: -golden },
+    { x: 0, y: 1, z: -golden },
+    { x: golden, y: 0, z: -1 },
+    { x: golden, y: 0, z: 1 },
+    { x: -golden, y: 0, z: -1 },
+    { x: -golden, y: 0, z: 1 },
+  ].map(normalizeVector);
+  let faces: Array<[number, number, number]> = [
+    [0, 11, 5],
+    [0, 5, 1],
+    [0, 1, 7],
+    [0, 7, 10],
+    [0, 10, 11],
+    [1, 5, 9],
+    [5, 11, 4],
+    [11, 10, 2],
+    [10, 7, 6],
+    [7, 1, 8],
+    [3, 9, 4],
+    [3, 4, 2],
+    [3, 2, 6],
+    [3, 6, 8],
+    [3, 8, 9],
+    [4, 9, 5],
+    [2, 4, 11],
+    [6, 2, 10],
+    [8, 6, 7],
+    [9, 8, 1],
+  ];
+
+  for (let level = 0; level < detail; level += 1) {
+    const midpointCache = new Map<string, number>();
+    const midpoint = (a: number, b: number) => {
+      const key = a < b ? `${a}:${b}` : `${b}:${a}`;
+      const cachedMidpoint = midpointCache.get(key);
+      if (cachedMidpoint !== undefined) return cachedMidpoint;
+      const left = vertices[a];
+      const right = vertices[b];
+      const index =
+        vertices.push(
+          normalizeVector({
+            x: (left.x + right.x) / 2,
+            y: (left.y + right.y) / 2,
+            z: (left.z + right.z) / 2,
+          }),
+        ) - 1;
+      midpointCache.set(key, index);
+      return index;
+    };
+
+    const nextFaces: Array<[number, number, number]> = [];
+    for (const [a, b, c] of faces) {
+      const ab = midpoint(a, b);
+      const bc = midpoint(b, c);
+      const ca = midpoint(c, a);
+      nextFaces.push([a, ab, ca], [b, bc, ab], [c, ca, bc], [ab, bc, ca]);
+    }
+    faces = nextFaces;
+  }
+
+  const edgeMap = new Map<string, [number, number]>();
+  for (const [a, b, c] of faces) {
+    for (const [start, end] of [
+      [a, b],
+      [b, c],
+      [c, a],
+    ] as Array<[number, number]>) {
+      const key = start < end ? `${start}:${end}` : `${end}:${start}`;
+      if (!edgeMap.has(key)) edgeMap.set(key, [start, end]);
+    }
+  }
+
+  const geometry = { vertices, edges: Array.from(edgeMap.values()) };
+  globeGeometryCache.set(detail, geometry);
+  return geometry;
+}
+
+function rotateAroundAxis(
+  vector: Vector3,
+  axis: Vector3,
+  angleDegrees: number,
+): Vector3 {
+  const angle = (angleDegrees * Math.PI) / 180;
+  const cosine = Math.cos(angle);
+  const sine = Math.sin(angle);
+  const dot = vector.x * axis.x + vector.y * axis.y + vector.z * axis.z;
+  return {
+    x:
+      vector.x * cosine +
+      (axis.y * vector.z - axis.z * vector.y) * sine +
+      axis.x * dot * (1 - cosine),
+    y:
+      vector.y * cosine +
+      (axis.z * vector.x - axis.x * vector.z) * sine +
+      axis.y * dot * (1 - cosine),
+    z:
+      vector.z * cosine +
+      (axis.x * vector.y - axis.y * vector.x) * sine +
+      axis.z * dot * (1 - cosine),
+  };
+}
+
+function globeSpinAxis(settings: Settings): Vector3 {
+  const tilt = (settings.globeSpinAxisTilt * Math.PI) / 180;
+  const heading = (settings.globeSpinAxisHeading * Math.PI) / 180;
+  return normalizeVector({
+    x: Math.sin(tilt) * Math.cos(heading),
+    y: Math.cos(tilt),
+    z: Math.sin(tilt) * Math.sin(heading),
+  });
+}
+
+function projectGlobeVertices(settings: Settings, spinAngle = 0) {
+  const { width, height } = canvasSize(settings);
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const axis = globeSpinAxis(settings);
+  return globeGeometry(settings.globeDetail).vertices.map((vertex) => {
+    const spun = rotateAroundAxis(vertex, axis, spinAngle);
+    const rotated = rotateVector(
+      spun,
+      settings.globeYaw,
+      settings.globeTilt,
+      settings.globeRoll,
+    );
+    return {
+      x: centerX + rotated.x * settings.globeRadius,
+      y: centerY - rotated.y * settings.globeRadius,
+      z: rotated.z,
+    };
+  });
+}
+
+function selectedGlobeNodeIndices(vertexCount: number, amount: number) {
+  const nodeCount = Math.round(vertexCount * (amount / 100));
+  return Array.from({ length: vertexCount }, (_, index) => ({
+    index,
+    order: Math.imul(index + 1, -1640531527) >>> 0,
+  }))
+    .sort((left, right) => left.order - right.order)
+    .slice(0, nodeCount)
+    .map(({ index }) => index);
+}
+
 function roundedPolygonPath(
   points: Array<{ x: number; y: number }>,
   rounding: number,
@@ -1398,13 +1575,9 @@ function globeNodePath(
   );
 }
 
-function globePaths(settings: Settings): RenderPath[] {
+function globePaths(settings: Settings, spinAngle = 0): RenderPath[] {
   const {
-    globeDetail,
     globeRadius,
-    globeYaw,
-    globeTilt,
-    globeRoll,
     globeBackOpacity,
     globeNodeAmount,
     globeNodeSize,
@@ -1416,93 +1589,8 @@ function globePaths(settings: Settings): RenderPath[] {
   const { width, height } = canvasSize(settings);
   const centerX = width / 2;
   const centerY = height / 2;
-  const golden = (1 + Math.sqrt(5)) / 2;
-  const vertices: Vector3[] = [
-    { x: -1, y: golden, z: 0 },
-    { x: 1, y: golden, z: 0 },
-    { x: -1, y: -golden, z: 0 },
-    { x: 1, y: -golden, z: 0 },
-    { x: 0, y: -1, z: golden },
-    { x: 0, y: 1, z: golden },
-    { x: 0, y: -1, z: -golden },
-    { x: 0, y: 1, z: -golden },
-    { x: golden, y: 0, z: -1 },
-    { x: golden, y: 0, z: 1 },
-    { x: -golden, y: 0, z: -1 },
-    { x: -golden, y: 0, z: 1 },
-  ].map(normalizeVector);
-  let faces: Array<[number, number, number]> = [
-    [0, 11, 5],
-    [0, 5, 1],
-    [0, 1, 7],
-    [0, 7, 10],
-    [0, 10, 11],
-    [1, 5, 9],
-    [5, 11, 4],
-    [11, 10, 2],
-    [10, 7, 6],
-    [7, 1, 8],
-    [3, 9, 4],
-    [3, 4, 2],
-    [3, 2, 6],
-    [3, 6, 8],
-    [3, 8, 9],
-    [4, 9, 5],
-    [2, 4, 11],
-    [6, 2, 10],
-    [8, 6, 7],
-    [9, 8, 1],
-  ];
-
-  for (let level = 0; level < globeDetail; level += 1) {
-    const midpointCache = new Map<string, number>();
-    const midpoint = (a: number, b: number) => {
-      const key = a < b ? `${a}:${b}` : `${b}:${a}`;
-      const cached = midpointCache.get(key);
-      if (cached !== undefined) return cached;
-      const left = vertices[a];
-      const right = vertices[b];
-      const index = vertices.push(
-        normalizeVector({
-          x: (left.x + right.x) / 2,
-          y: (left.y + right.y) / 2,
-          z: (left.z + right.z) / 2,
-        }),
-      ) - 1;
-      midpointCache.set(key, index);
-      return index;
-    };
-
-    const nextFaces: Array<[number, number, number]> = [];
-    for (const [a, b, c] of faces) {
-      const ab = midpoint(a, b);
-      const bc = midpoint(b, c);
-      const ca = midpoint(c, a);
-      nextFaces.push([a, ab, ca], [b, bc, ab], [c, ca, bc], [ab, bc, ca]);
-    }
-    faces = nextFaces;
-  }
-
-  const edgeMap = new Map<string, [number, number]>();
-  for (const [a, b, c] of faces) {
-    for (const [start, end] of [
-      [a, b],
-      [b, c],
-      [c, a],
-    ] as Array<[number, number]>) {
-      const key = start < end ? `${start}:${end}` : `${end}:${start}`;
-      if (!edgeMap.has(key)) edgeMap.set(key, [start, end]);
-    }
-  }
-
-  const projectedVertices = vertices.map((vertex) => {
-    const rotated = rotateVector(vertex, globeYaw, globeTilt, globeRoll);
-    return {
-      x: centerX + rotated.x * globeRadius,
-      y: centerY - rotated.y * globeRadius,
-      z: rotated.z,
-    };
-  });
+  const { edges } = globeGeometry(settings.globeDetail);
+  const projectedVertices = projectGlobeVertices(settings, spinAngle);
   const sideOpacity = (depth: number) =>
     depth >= 0 ? 1 : globeBackOpacity;
   const globeLayer = {
@@ -1518,17 +1606,10 @@ function globePaths(settings: Settings): RenderPath[] {
     path: RenderPath;
   };
 
-  const nodeCount = Math.round(
-    projectedVertices.length * (globeNodeAmount / 100),
+  const selectedNodeIndices = selectedGlobeNodeIndices(
+    projectedVertices.length,
+    globeNodeAmount,
   );
-  const selectedNodeIndices = projectedVertices
-    .map((_, index) => ({
-      index,
-      order: Math.imul(index + 1, -1640531527) >>> 0,
-    }))
-    .sort((left, right) => left.order - right.order)
-    .slice(0, nodeCount)
-    .map(({ index }) => index);
   const selectedNodeSet = new Set(selectedNodeIndices);
   const nodeClearance = globeNodeSize / 2 + settings.lineWeight / 2;
 
@@ -1550,7 +1631,7 @@ function globePaths(settings: Settings): RenderPath[] {
     };
   };
 
-  const edgeItems = Array.from(edgeMap.values()).flatMap(
+  const edgeItems = edges.flatMap(
     ([startIndex, endIndex], edgeIndex) => {
       const start = projectedVertices[startIndex];
       const end = projectedVertices[endIndex];
@@ -1817,14 +1898,14 @@ function torusPaths(settings: Settings): RenderPath[] {
   return renderItems.map(({ path }) => path);
 }
 
-function generatePaths(settings: Settings) {
+function generatePaths(settings: Settings, globeSpinAngle = 0) {
   if (settings.mode === "spirograph") return spirographPaths(settings);
   if (settings.mode === "border") return borderPaths(settings);
   if (settings.mode === "ribbon") return ribbonPaths(settings);
   if (settings.mode === "field") return fieldPaths(settings);
   if (settings.mode === "moire") return moirePaths(settings);
   if (settings.mode === "hatch") return hatchPaths(settings);
-  if (settings.mode === "globe") return globePaths(settings);
+  if (settings.mode === "globe") return globePaths(settings, globeSpinAngle);
   if (settings.mode === "torus") return torusPaths(settings);
   return radialPaths(settings);
 }
@@ -1884,6 +1965,461 @@ function svgMarkup(settings: Settings, paths: RenderPath[]) {
   ${paper}
   <g clip-path="url(#guilloche-plate)">${pathMarkup}</g>
 </svg>`;
+}
+
+function drawCanvasFrame(
+  canvas: HTMLCanvasElement,
+  settings: Settings,
+  globeSpinAngle: number,
+) {
+  const { width, height } = canvasSize(settings);
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Canvas rendering is unavailable.");
+  context.setTransform(1, 0, 0, 1, 0, 0);
+  context.clearRect(0, 0, width, height);
+  if (!settings.transparent) {
+    context.fillStyle = settings.paper;
+    context.fillRect(0, 0, width, height);
+  }
+
+  const colors = palettes[settings.palette] ?? palettes.Treasury;
+  const paths = generatePaths(settings, globeSpinAngle);
+  context.lineCap = settings.mode === "hatch" ? "butt" : "round";
+  context.lineJoin = "round";
+  for (const path of paths) {
+    const geometry = new Path2D(path.d);
+    const opacity = pathOpacity(settings, path);
+    const fill = pathFill(settings, path, colors);
+    const stroke = pathOutline(settings, path, colors);
+    context.globalAlpha = opacity;
+    if (fill !== "none") {
+      context.fillStyle = fill;
+      context.fill(geometry);
+    }
+    if (stroke !== "none") {
+      context.strokeStyle = stroke;
+      context.lineWidth = settings.lineWeight * (path.weight ?? 1);
+      context.stroke(geometry);
+    }
+  }
+  context.globalAlpha = 1;
+}
+
+type RecordedVideoFormat = {
+  mimeType: string;
+  extension: "mp4" | "webm";
+  label: "MP4" | "WebM";
+};
+
+function preferredVideoFormat(): RecordedVideoFormat | null {
+  if (typeof MediaRecorder === "undefined") return null;
+  const formats: RecordedVideoFormat[] = [
+    {
+      mimeType: "video/mp4;codecs=avc1.42E01E",
+      extension: "mp4",
+      label: "MP4",
+    },
+    { mimeType: "video/mp4", extension: "mp4", label: "MP4" },
+    {
+      mimeType: "video/webm;codecs=vp9",
+      extension: "webm",
+      label: "WebM",
+    },
+    {
+      mimeType: "video/webm;codecs=vp8",
+      extension: "webm",
+      label: "WebM",
+    },
+    { mimeType: "video/webm", extension: "webm", label: "WebM" },
+  ];
+  return (
+    formats.find((format) => MediaRecorder.isTypeSupported(format.mimeType)) ??
+    null
+  );
+}
+
+type LottieShape = Record<string, unknown>;
+type LottieLayer = Record<string, unknown>;
+
+function lottieColor(hex: string) {
+  const normalized = hex.replace("#", "");
+  const value =
+    normalized.length === 3
+      ? normalized
+          .split("")
+          .map((part) => `${part}${part}`)
+          .join("")
+      : normalized;
+  return [0, 2, 4].map((offset) =>
+    Number((Number.parseInt(value.slice(offset, offset + 2), 16) / 255).toFixed(6)),
+  );
+}
+
+function lottieTransform(
+  position: [number, number, number] = [0, 0, 0],
+) {
+  return {
+    o: { a: 0, k: 100 },
+    r: { a: 0, k: 0 },
+    p: { a: 0, k: position },
+    a: { a: 0, k: [0, 0, 0] },
+    s: { a: 0, k: [100, 100, 100] },
+  };
+}
+
+function lottieLineShape(start: Vector3, end: Vector3) {
+  return {
+    c: false,
+    v: [
+      [precise(start.x), precise(start.y)],
+      [precise(end.x), precise(end.y)],
+    ],
+    i: [
+      [0, 0],
+      [0, 0],
+    ],
+    o: [
+      [0, 0],
+      [0, 0],
+    ],
+  };
+}
+
+function hemisphereSegment(start: Vector3, end: Vector3, front: boolean) {
+  const startIsFront = start.z >= 0;
+  const endIsFront = end.z >= 0;
+  if (startIsFront === endIsFront) {
+    if (startIsFront === front) return [start, end] as const;
+    const hidden = { x: -10, y: -10, z: 0 };
+    return [hidden, hidden] as const;
+  }
+  const ratio = -start.z / (end.z - start.z);
+  const horizon = {
+    x: start.x + (end.x - start.x) * ratio,
+    y: start.y + (end.y - start.y) * ratio,
+    z: 0,
+  };
+  return startIsFront === front
+    ? ([start, horizon] as const)
+    : ([horizon, end] as const);
+}
+
+function lottieShapeKeyframes(
+  values: Array<{ c: boolean; v: number[][]; i: number[][]; o: number[][] }>,
+  totalFrames: number,
+) {
+  return values.map((value, index) => {
+    const frame = Number(
+      ((index / (values.length - 1)) * totalFrames).toFixed(3),
+    );
+    return index === values.length - 1
+      ? { t: frame, s: [value] }
+      : {
+          t: frame,
+          s: [value],
+          o: { x: 0, y: 0 },
+          i: { x: 1, y: 1 },
+        };
+  });
+}
+
+function lottiePositionKeyframes(
+  values: Vector3[],
+  totalFrames: number,
+) {
+  return values.map((value, index) => {
+    const frame = Number(
+      ((index / (values.length - 1)) * totalFrames).toFixed(3),
+    );
+    const position = [precise(value.x), precise(value.y), 0];
+    return index === values.length - 1
+      ? { t: frame, s: position }
+      : {
+          t: frame,
+          s: position,
+          o: { x: 0, y: 0 },
+          i: { x: 1, y: 1 },
+        };
+  });
+}
+
+function lottieOpacityKeyframes(
+  values: number[],
+  totalFrames: number,
+) {
+  return values.map((value, index) => {
+    const frame = Number(
+      ((index / (values.length - 1)) * totalFrames).toFixed(3),
+    );
+    return index === values.length - 1
+      ? { t: frame, s: [value] }
+      : { t: frame, s: [value], h: 1 };
+  });
+}
+
+function lottieNodeShapes(settings: Settings): LottieShape[] {
+  const radius = settings.globeNodeSize / 2;
+  const geometry: LottieShape =
+    settings.globeNodeShape === "circle"
+      ? {
+          ty: "el",
+          d: 1,
+          p: { a: 0, k: [0, 0] },
+          s: {
+            a: 0,
+            k: [settings.globeNodeSize, settings.globeNodeSize],
+          },
+          nm: "Circle node",
+        }
+      : {
+          ty: "sr",
+          sy: 2,
+          d: 1,
+          pt: {
+            a: 0,
+            k: settings.globeNodeShape === "triangle" ? 3 : 4,
+          },
+          p: { a: 0, k: [0, 0] },
+          r: {
+            a: 0,
+            k: settings.globeNodeShape === "triangle" ? 0 : 45,
+          },
+          or: { a: 0, k: radius },
+          os: { a: 0, k: 0 },
+          ir: { a: 0, k: 0 },
+          is: { a: 0, k: 0 },
+          nm:
+            settings.globeNodeShape === "triangle"
+              ? "Rounded triangle node"
+              : "Rounded diamond node",
+        };
+  const shapes: LottieShape[] = [geometry];
+  if (settings.globeNodeShape !== "circle") {
+    shapes.push({
+      ty: "rd",
+      r: { a: 0, k: settings.globeNodeSize * 0.18 },
+      nm: "Node rounding",
+    });
+  }
+  shapes.push({
+    ty: "fl",
+    c: { a: 0, k: lottieColor(settings.globeNodeFill) },
+    o: { a: 0, k: 100 },
+    r: 1,
+    nm: "Node fill",
+  });
+  if (settings.globeNodeStyle === "stroked") {
+    shapes.push({
+      ty: "st",
+      c: { a: 0, k: lottieColor(settings.globeNodeStroke) },
+      o: { a: 0, k: 100 },
+      w: { a: 0, k: settings.lineWeight },
+      lc: 2,
+      lj: 2,
+      ml: 4,
+      nm: "Node stroke",
+    });
+  }
+  return shapes;
+}
+
+function globeLottieMarkup(settings: Settings, startingAngle: number) {
+  const frameRate = 30;
+  const totalFrames = Math.max(
+    1,
+    Math.round((60 / settings.globeSpinSpeed) * frameRate),
+  );
+  const sampleCount = settings.globeDetail === 3 ? 48 : 72;
+  const direction = settings.globeSpinDirection;
+  const samples = Array.from({ length: sampleCount + 1 }, (_, index) =>
+    projectGlobeVertices(
+      settings,
+      startingAngle + direction * (index / sampleCount) * 360,
+    ),
+  );
+  const { width, height } = canvasSize(settings);
+  const { edges, vertices } = globeGeometry(settings.globeDetail);
+  const colors = palettes[settings.palette] ?? palettes.Treasury;
+  const edgeColorCount = settings.colorMode === "single" ? 1 : colors.length;
+  const selectedNodeIndices = selectedGlobeNodeIndices(
+    vertices.length,
+    settings.globeNodeAmount,
+  );
+  let layerIndex = 1;
+  const layers: LottieLayer[] = [];
+
+  const nodeLayer = (vertexIndex: number, front: boolean): LottieLayer => {
+    const positions = samples.map((sample) => sample[vertexIndex]);
+    const opacities = positions.map((point) => {
+      const visible = front ? point.z >= 0 : point.z < 0;
+      return visible ? (front ? 100 : settings.globeBackOpacity * 100) : 0;
+    });
+    return {
+      ddd: 0,
+      ind: layerIndex++,
+      ty: 4,
+      nm: `${front ? "Front" : "Rear"} node ${vertexIndex}`,
+      sr: 1,
+      ks: {
+        ...lottieTransform(),
+        o: { a: 1, k: lottieOpacityKeyframes(opacities, totalFrames) },
+        p: { a: 1, k: lottiePositionKeyframes(positions, totalFrames) },
+      },
+      ao: 0,
+      shapes: lottieNodeShapes(settings),
+      ip: 0,
+      op: totalFrames,
+      st: 0,
+      bm: 0,
+    };
+  };
+
+  for (const vertexIndex of selectedNodeIndices) {
+    layers.push(nodeLayer(vertexIndex, true));
+  }
+
+  const outlineColor =
+    settings.colorMode === "single" ? settings.ink : colors[0];
+  layers.push({
+    ddd: 0,
+    ind: layerIndex++,
+    ty: 4,
+    nm: "Sphere outline",
+    sr: 1,
+    ks: lottieTransform(),
+    ao: 0,
+    shapes: [
+      {
+        ty: "el",
+        d: 1,
+        p: { a: 0, k: [width / 2, height / 2] },
+        s: { a: 0, k: [settings.globeRadius * 2, settings.globeRadius * 2] },
+        nm: "Sphere boundary",
+      },
+      {
+        ty: "st",
+        c: { a: 0, k: lottieColor(outlineColor) },
+        o: { a: 0, k: 100 },
+        w: { a: 0, k: settings.lineWeight * 1.08 },
+        lc: 2,
+        lj: 2,
+        ml: 4,
+        nm: "Outline stroke",
+      },
+    ],
+    ip: 0,
+    op: totalFrames,
+    st: 0,
+    bm: 0,
+  });
+
+  const edgeLayers = (front: boolean) => {
+    for (let colorIndex = 0; colorIndex < edgeColorCount; colorIndex += 1) {
+      const edgeShapes: LottieShape[] = [];
+      edges.forEach(([startIndex, endIndex], edgeIndex) => {
+        if (edgeIndex % edgeColorCount !== colorIndex) return;
+        const values = samples.map((sample) => {
+          const [start, end] = hemisphereSegment(
+            sample[startIndex],
+            sample[endIndex],
+            front,
+          );
+          return lottieLineShape(start, end);
+        });
+        edgeShapes.push({
+          ty: "sh",
+          ks: { a: 1, k: lottieShapeKeyframes(values, totalFrames) },
+          nm: `Edge ${edgeIndex}`,
+        });
+      });
+      const color =
+        settings.colorMode === "single" ? settings.ink : colors[colorIndex];
+      edgeShapes.push({
+        ty: "st",
+        c: { a: 0, k: lottieColor(color) },
+        o: {
+          a: 0,
+          k: front ? 100 : settings.globeBackOpacity * 100,
+        },
+        w: { a: 0, k: settings.lineWeight },
+        lc: 1,
+        lj: 2,
+        ml: 4,
+        nm: `${front ? "Front" : "Rear"} mesh stroke`,
+      });
+      layers.push({
+        ddd: 0,
+        ind: layerIndex++,
+        ty: 4,
+        nm: `${front ? "Front" : "Rear"} mesh ${colorIndex + 1}`,
+        sr: 1,
+        ks: lottieTransform(),
+        ao: 0,
+        shapes: edgeShapes,
+        ip: 0,
+        op: totalFrames,
+        st: 0,
+        bm: 0,
+      });
+    }
+  };
+
+  edgeLayers(true);
+  for (const vertexIndex of selectedNodeIndices) {
+    layers.push(nodeLayer(vertexIndex, false));
+  }
+  edgeLayers(false);
+
+  if (!settings.transparent) {
+    layers.push({
+      ddd: 0,
+      ind: layerIndex++,
+      ty: 4,
+      nm: "Paper",
+      sr: 1,
+      ks: lottieTransform(),
+      ao: 0,
+      shapes: [
+        {
+          ty: "rc",
+          d: 1,
+          p: { a: 0, k: [width / 2, height / 2] },
+          s: { a: 0, k: [width, height] },
+          r: { a: 0, k: 0 },
+          nm: "Canvas",
+        },
+        {
+          ty: "fl",
+          c: { a: 0, k: lottieColor(settings.paper) },
+          o: { a: 0, k: 100 },
+          r: 1,
+          nm: "Paper fill",
+        },
+      ],
+      ip: 0,
+      op: totalFrames,
+      st: 0,
+      bm: 0,
+    });
+  }
+
+  return JSON.stringify({
+    v: "5.12.2",
+    fr: frameRate,
+    ip: 0,
+    op: totalFrames,
+    w: width,
+    h: height,
+    nm: "Rouletté rotating geodesic globe",
+    ddd: 0,
+    assets: [],
+    layers,
+    markers: [],
+  });
 }
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -2010,6 +2546,10 @@ function randomizedSettings(current: Settings): Settings {
     globeYaw: Math.floor(-180 + Math.random() * 361),
     globeTilt: Math.floor(-60 + Math.random() * 121),
     globeRoll: Math.floor(-30 + Math.random() * 61),
+    globeSpinAxisTilt: Math.floor(Math.random() * 91),
+    globeSpinAxisHeading: Math.floor(-180 + Math.random() * 361),
+    globeSpinSpeed: 4 + Math.floor(Math.random() * 21),
+    globeSpinDirection: Math.random() > 0.5 ? 1 : -1,
     globeBackOpacity: fixed(0.03 + Math.random() * 0.25),
     globeNodeAmount: Math.floor(Math.random() * 101),
     globeNodeSize: fixed(2 + Math.random() * 8),
@@ -2036,7 +2576,13 @@ export default function Home() {
   const [settings, setSettings] = useState<Settings>(baseSettings);
   const [activePreset, setActivePreset] = useState("Treasury");
   const [notice, setNotice] = useState("");
+  const [isGlobeSpinning, setIsGlobeSpinning] = useState(false);
+  const [globeSpinAngle, setGlobeSpinAngle] = useState(0);
+  const [isRecordingGlobe, setIsRecordingGlobe] = useState(false);
+  const [recordingProgress, setRecordingProgress] = useState(0);
+  const [isExportingLottie, setIsExportingLottie] = useState(false);
   const noticeTimer = useRef<number | null>(null);
+  const globeSpinAngleRef = useRef(0);
   const renderSettings = useDeferredValue(settings);
   const previewSettings = useMemo(
     () => ({
@@ -2046,8 +2592,12 @@ export default function Home() {
     [renderSettings],
   );
   const paths = useMemo(
-    () => generatePaths(previewSettings),
-    [previewSettings],
+    () =>
+      generatePaths(
+        previewSettings,
+        previewSettings.mode === "globe" ? globeSpinAngle : 0,
+      ),
+    [globeSpinAngle, previewSettings],
   );
   const colors =
     palettes[renderSettings.palette] ?? palettes[baseSettings.palette];
@@ -2078,6 +2628,47 @@ export default function Home() {
   const spiroClosureTurns =
     settings.spiroRollingRadius /
     gcd(settings.spiroFixedRadius, settings.spiroRollingRadius);
+  const globeTurnDuration = 60 / settings.globeSpinSpeed;
+
+  useEffect(() => {
+    if (
+      !isGlobeSpinning ||
+      isRecordingGlobe ||
+      settings.mode !== "globe"
+    ) {
+      return;
+    }
+    let animationFrame = 0;
+    let lastFrame: number | null = null;
+    const frameInterval = 1000 / 30;
+    const tick = (timestamp: number) => {
+      if (lastFrame === null) lastFrame = timestamp;
+      const elapsed = timestamp - lastFrame;
+      if (elapsed >= frameInterval) {
+        const boundedElapsed = Math.min(elapsed, 100);
+        const nextAngle =
+          (globeSpinAngleRef.current +
+            (boundedElapsed / 1000) *
+              settings.globeSpinSpeed *
+              6 *
+              settings.globeSpinDirection +
+            360) %
+          360;
+        globeSpinAngleRef.current = nextAngle;
+        setGlobeSpinAngle(nextAngle);
+        lastFrame = timestamp;
+      }
+      animationFrame = window.requestAnimationFrame(tick);
+    };
+    animationFrame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [
+    isGlobeSpinning,
+    isRecordingGlobe,
+    settings.globeSpinDirection,
+    settings.globeSpinSpeed,
+    settings.mode,
+  ]);
 
   const flash = (message: string) => {
     setNotice(message);
@@ -2092,7 +2683,14 @@ export default function Home() {
     );
   };
 
+  const resetGlobeSpin = () => {
+    globeSpinAngleRef.current = 0;
+    setGlobeSpinAngle(0);
+    setIsGlobeSpinning(false);
+  };
+
   const choosePreset = (preset: Preset) => {
+    resetGlobeSpin();
     setSettings((current) =>
       withSafeHatchThickness({
         ...baseSettings,
@@ -2104,6 +2702,7 @@ export default function Home() {
   };
 
   const chooseMode = (mode: PatternMode) => {
+    resetGlobeSpin();
     const startingPlate = presets.find(
       (preset) => preset.settings.mode === mode,
     );
@@ -2119,6 +2718,7 @@ export default function Home() {
   };
 
   const randomize = () => {
+    resetGlobeSpin();
     setSettings((current) =>
       withSafeHatchThickness(randomizedSettings(current)),
     );
@@ -2127,7 +2727,13 @@ export default function Home() {
   };
 
   const downloadSvg = () => {
-    const exportSvg = svgMarkup(settings, generatePaths(settings));
+    const exportSvg = svgMarkup(
+      settings,
+      generatePaths(
+        settings,
+        settings.mode === "globe" ? globeSpinAngleRef.current : 0,
+      ),
+    );
     const geometryCode =
       settings.mode === "hatch"
         ? `${settings.hatchHeight}x${settings.hatchLength}`
@@ -2152,7 +2758,13 @@ export default function Home() {
   const copySvg = async () => {
     try {
       await navigator.clipboard.writeText(
-        svgMarkup(settings, generatePaths(settings)),
+        svgMarkup(
+          settings,
+          generatePaths(
+            settings,
+            settings.mode === "globe" ? globeSpinAngleRef.current : 0,
+          ),
+        ),
       );
       flash("SVG copied to clipboard.");
     } catch {
@@ -2161,7 +2773,13 @@ export default function Home() {
   };
 
   const downloadPng = () => {
-    const exportSvg = svgMarkup(settings, generatePaths(settings));
+    const exportSvg = svgMarkup(
+      settings,
+      generatePaths(
+        settings,
+        settings.mode === "globe" ? globeSpinAngleRef.current : 0,
+      ),
+    );
     const source = new Blob([exportSvg], {
       type: "image/svg+xml;charset=utf-8",
     });
@@ -2189,6 +2807,102 @@ export default function Home() {
       }, "image/png");
     };
     image.src = url;
+  };
+
+  const downloadGlobeLottie = async () => {
+    if (settings.mode !== "globe" || isExportingLottie) return;
+    setIsExportingLottie(true);
+    flash("Building vector Lottie loop…");
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+    try {
+      const lottie = globeLottieMarkup(settings, globeSpinAngleRef.current);
+      downloadBlob(
+        new Blob([lottie], { type: "video/lottie+json;charset=utf-8" }),
+        `guilloche-globe-${settings.globeSpinSpeed}rpm-${settings.canvasRatio.replace(":", "x")}.json`,
+      );
+      flash("Vector Lottie loop exported.");
+    } catch {
+      flash("The Lottie loop could not be generated.");
+    } finally {
+      setIsExportingLottie(false);
+    }
+  };
+
+  const recordGlobeVideo = async () => {
+    if (settings.mode !== "globe" || isRecordingGlobe) return;
+    const format = preferredVideoFormat();
+    const canvas = document.createElement("canvas");
+    if (!format || typeof canvas.captureStream !== "function") {
+      flash("Video recording is not supported in this browser.");
+      return;
+    }
+
+    const wasSpinning = isGlobeSpinning;
+    const startingAngle = globeSpinAngleRef.current;
+    const durationMs = globeTurnDuration * 1000;
+    const frameRate = 30;
+    setIsGlobeSpinning(false);
+    setIsRecordingGlobe(true);
+    setRecordingProgress(0);
+    flash(`Recording one ${format.label} turn…`);
+
+    let stream: MediaStream | null = null;
+    try {
+      drawCanvasFrame(canvas, settings, startingAngle);
+      stream = canvas.captureStream(frameRate);
+      const chunks: Blob[] = [];
+      const recorder = new MediaRecorder(stream, {
+        mimeType: format.mimeType,
+        videoBitsPerSecond: 12_000_000,
+      });
+      const recordingComplete = new Promise<Blob>((resolve, reject) => {
+        recorder.ondataavailable = (event) => {
+          if (event.data.size > 0) chunks.push(event.data);
+        };
+        recorder.onerror = () => reject(new Error("Video encoder failed."));
+        recorder.onstop = () =>
+          resolve(new Blob(chunks, { type: format.mimeType }));
+      });
+
+      recorder.start(250);
+      await new Promise<void>((resolve) => {
+        const startedAt = performance.now();
+        let lastProgressUpdate = startedAt;
+        const renderFrame = (timestamp: number) => {
+          const progress = Math.min((timestamp - startedAt) / durationMs, 1);
+          const angle =
+            startingAngle + settings.globeSpinDirection * progress * 360;
+          drawCanvasFrame(canvas, settings, angle);
+          if (timestamp - lastProgressUpdate >= 100 || progress === 1) {
+            setRecordingProgress(progress);
+            lastProgressUpdate = timestamp;
+          }
+          if (progress < 1) {
+            window.requestAnimationFrame(renderFrame);
+          } else {
+            window.setTimeout(() => recorder.stop(), 1000 / frameRate);
+            resolve();
+          }
+        };
+        window.requestAnimationFrame(renderFrame);
+      });
+
+      const blob = await recordingComplete;
+      downloadBlob(
+        blob,
+        `guilloche-globe-${settings.globeSpinSpeed}rpm-${settings.canvasRatio.replace(":", "x")}.${format.extension}`,
+      );
+      flash(`${format.label} rotation exported.`);
+    } catch {
+      flash("The rotation clip could not be recorded.");
+    } finally {
+      stream?.getTracks().forEach((track) => track.stop());
+      globeSpinAngleRef.current = startingAngle;
+      setGlobeSpinAngle(startingAngle);
+      setRecordingProgress(0);
+      setIsRecordingGlobe(false);
+      setIsGlobeSpinning(wasSpinning);
+    }
   };
 
   const modeCode =
@@ -2865,7 +3579,7 @@ export default function Home() {
               ) : settings.mode === "globe" ? (
                 <>
                   <RangeControl
-                    label="Yaw"
+                    label="Starting angle"
                     value={settings.globeYaw}
                     min={-180}
                     max={180}
@@ -2873,7 +3587,7 @@ export default function Home() {
                     onChange={(value) => update("globeYaw", value)}
                   />
                   <RangeControl
-                    label="Tilt"
+                    label="View tilt"
                     value={settings.globeTilt}
                     min={-90}
                     max={90}
@@ -2881,7 +3595,7 @@ export default function Home() {
                     onChange={(value) => update("globeTilt", value)}
                   />
                   <RangeControl
-                    label="Roll"
+                    label="View roll"
                     value={settings.globeRoll}
                     min={-180}
                     max={180}
@@ -3057,6 +3771,123 @@ export default function Home() {
               )}
             </div>
           </details>
+
+          {settings.mode === "globe" && (
+            <details className="control-section" open>
+              <summary>
+                <span>Motion</span>
+                <span className="summary-mark" aria-hidden="true">
+                  <CaretDown size={13} weight="bold" />
+                </span>
+              </summary>
+              <div className="control-stack">
+                <RangeControl
+                  label="Axis tilt"
+                  value={settings.globeSpinAxisTilt}
+                  min={0}
+                  max={90}
+                  unit="°"
+                  onChange={(value) => update("globeSpinAxisTilt", value)}
+                />
+                <RangeControl
+                  label="Axis heading"
+                  value={settings.globeSpinAxisHeading}
+                  min={-180}
+                  max={180}
+                  unit="°"
+                  onChange={(value) => update("globeSpinAxisHeading", value)}
+                />
+                <RangeControl
+                  label="Rotation speed"
+                  value={settings.globeSpinSpeed}
+                  min={4}
+                  max={24}
+                  unit=" rpm"
+                  onChange={(value) => update("globeSpinSpeed", value)}
+                />
+                <div className="segmented" aria-label="Rotation direction">
+                  <button
+                    type="button"
+                    className={
+                      settings.globeSpinDirection === 1 ? "is-active" : ""
+                    }
+                    onClick={() => update("globeSpinDirection", 1)}
+                  >
+                    Clockwise
+                  </button>
+                  <button
+                    type="button"
+                    className={
+                      settings.globeSpinDirection === -1 ? "is-active" : ""
+                    }
+                    onClick={() => update("globeSpinDirection", -1)}
+                  >
+                    Counterclockwise
+                  </button>
+                </div>
+                <button
+                  className={`motion-toggle ${
+                    isGlobeSpinning ? "is-active" : ""
+                  }`}
+                  type="button"
+                  onClick={() => setIsGlobeSpinning((current) => !current)}
+                  aria-pressed={isGlobeSpinning}
+                  disabled={isRecordingGlobe}
+                >
+                  {isGlobeSpinning ? (
+                    <Pause size={15} weight="fill" aria-hidden="true" />
+                  ) : (
+                    <Play size={15} weight="fill" aria-hidden="true" />
+                  )}
+                  {isGlobeSpinning ? "Pause rotation" : "Preview rotation"}
+                </button>
+                <div className="motion-export-grid">
+                  <button
+                    className="motion-export-button"
+                    type="button"
+                    onClick={recordGlobeVideo}
+                    disabled={isRecordingGlobe || isExportingLottie}
+                  >
+                    <Record size={15} weight="fill" aria-hidden="true" />
+                    {isRecordingGlobe
+                      ? `${Math.round(recordingProgress * 100)}%`
+                      : "Record video"}
+                  </button>
+                  <button
+                    className="motion-export-button"
+                    type="button"
+                    onClick={downloadGlobeLottie}
+                    disabled={isRecordingGlobe || isExportingLottie}
+                  >
+                    <FileJs size={15} weight="regular" aria-hidden="true" />
+                    {isExportingLottie ? "Building…" : "Export Lottie"}
+                  </button>
+                </div>
+                {isRecordingGlobe && (
+                  <div
+                    className="recording-progress"
+                    role="progressbar"
+                    aria-label="Recording rotation"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.round(recordingProgress * 100)}
+                  >
+                    <span
+                      style={{
+                        transform: `scaleX(${recordingProgress})`,
+                      }}
+                    />
+                  </div>
+                )}
+                <div className="math-note is-good">
+                  <span>{globeTurnDuration.toFixed(1)} s loop</span>
+                  <small>
+                    Exact 360° turn · vector JSON or MP4/WebM clip
+                  </small>
+                </div>
+              </div>
+            </details>
+          )}
 
           {(settings.mode === "globe" || settings.mode === "torus") && (
             <details className="control-section" open>

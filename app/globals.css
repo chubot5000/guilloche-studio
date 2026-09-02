@@ -137,7 +137,9 @@ button:active {
 .png-button,
 .inspector-action,
 .preset-card,
-.tool-button {
+.tool-button,
+.motion-toggle,
+.motion-export-button {
   transition:
     background-color 150ms var(--ease-out),
     color 150ms var(--ease-out),
@@ -166,6 +168,63 @@ button:active {
 .png-button {
   background: transparent;
   color: var(--muted);
+}
+
+.motion-toggle,
+.motion-export-button {
+  align-items: center;
+  border: 0;
+  border-radius: 7px;
+  display: flex;
+  font-size: 10px;
+  font-weight: 560;
+  gap: 7px;
+  justify-content: center;
+  min-height: 34px;
+}
+
+.motion-toggle {
+  background: #ededed;
+  color: #1c1c1c;
+  width: 100%;
+}
+
+.motion-toggle.is-active {
+  background: var(--surface-active);
+  color: var(--text);
+}
+
+.motion-export-grid {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.motion-export-button {
+  background: var(--surface-raised);
+  color: var(--muted);
+  padding: 7px 8px;
+}
+
+.motion-toggle:disabled,
+.motion-export-button:disabled {
+  cursor: wait;
+  opacity: 0.48;
+}
+
+.recording-progress {
+  background: #414141;
+  border-radius: 999px;
+  height: 2px;
+  overflow: hidden;
+}
+
+.recording-progress span {
+  background: #ededed;
+  display: block;
+  height: 100%;
+  transform-origin: left center;
+  transition: transform 100ms linear;
 }
 
 .studio-grid {
@@ -745,9 +804,14 @@ input[type="color"]:disabled {
   .png-button:hover,
   .inspector-action:hover,
   .preset-card:hover,
-  .tool-button:hover:not(.is-active) {
+  .tool-button:hover:not(.is-active),
+  .motion-export-button:hover:not(:disabled) {
     background: var(--surface-hover);
     color: var(--text);
+  }
+
+  .motion-toggle:hover:not(:disabled):not(.is-active) {
+    background: #ffffff;
   }
 }
 

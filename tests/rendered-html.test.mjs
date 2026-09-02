@@ -153,3 +153,24 @@ test("keeps globe nodes above their hemisphere mesh without line bleed", async (
   assert.match(source, /horizonRatio/);
   assert.match(source, /left\.layer - right\.layer \|\| left\.depth - right\.depth/);
 });
+
+test("animates and exports a mathematically projected globe rotation", async () => {
+  const source = await readFile(
+    new URL("../app/page.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /function rotateAroundAxis\(/);
+  assert.match(source, /function globeSpinAxis\(/);
+  assert.match(source, /settings\.globeSpinSpeed \*\s*6/);
+  assert.match(source, /window\.requestAnimationFrame\(tick\)/);
+  assert.match(source, /Axis tilt/);
+  assert.match(source, /Axis heading/);
+  assert.match(source, /Rotation speed/);
+  assert.match(source, /function globeLottieMarkup\(/);
+  assert.match(source, /function hemisphereSegment\(/);
+  assert.match(source, /Export Lottie/);
+  assert.match(source, /canvas\.captureStream\(frameRate\)/);
+  assert.match(source, /new MediaRecorder\(/);
+  assert.match(source, /Record video/);
+});
