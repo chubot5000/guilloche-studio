@@ -167,10 +167,14 @@ test("animates and exports a mathematically projected globe rotation", async () 
   assert.match(source, /Axis tilt/);
   assert.match(source, /Axis heading/);
   assert.match(source, /Rotation speed/);
+  assert.match(source, /Frame rate/);
+  assert.match(source, /globeFrameRate: 60/);
+  assert.match(source, /1000 \/ settings\.globeFrameRate/);
   assert.match(source, /function globeLottieMarkup\(/);
   assert.match(source, /function hemisphereSegment\(/);
   assert.match(source, /Export Lottie/);
   assert.match(source, /canvas\.captureStream\(frameRate\)/);
+  assert.match(source, /frameRate === 60 \? 20_000_000 : 12_000_000/);
   assert.match(source, /new MediaRecorder\(/);
   assert.match(source, /Record video/);
 });

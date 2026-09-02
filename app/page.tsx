@@ -44,6 +44,7 @@ type CanvasRatio = "1:1" | "3:2" | "16:9";
 type GlobeNodeStyle = "filled" | "stroked";
 type GlobeNodeShape = "circle" | "triangle" | "diamond";
 type GlobeSpinDirection = 1 | -1;
+type GlobeFrameRate = 30 | 60;
 type SpiroType = "hypotrochoid" | "epitrochoid";
 type MoireType = "linear" | "radial";
 
@@ -104,6 +105,7 @@ type Settings = {
   globeSpinAxisHeading: number;
   globeSpinSpeed: number;
   globeSpinDirection: GlobeSpinDirection;
+  globeFrameRate: GlobeFrameRate;
   globeBackOpacity: number;
   globeNodeAmount: number;
   globeNodeSize: number;
@@ -243,6 +245,7 @@ const baseSettings: Settings = {
   globeSpinAxisHeading: 0,
   globeSpinSpeed: 10,
   globeSpinDirection: 1,
+  globeFrameRate: 60,
   globeBackOpacity: 0.13,
   globeNodeAmount: 0,
   globeNodeSize: 4,
@@ -2228,7 +2231,7 @@ function lottieNodeShapes(settings: Settings): LottieShape[] {
 }
 
 function globeLottieMarkup(settings: Settings, startingAngle: number) {
-  const frameRate = 30;
+  const frameRate = settings.globeFrameRate;
   const totalFrames = Math.max(
     1,
     Math.round((60 / settings.globeSpinSpeed) * frameRate),
@@ -2640,11 +2643,11 @@ export default function Home() {
     }
     let animationFrame = 0;
     let lastFrame: number | null = null;
-    const frameInterval = 1000 / 30;
+    const frameInterval = 1000 / settings.globeFrameRate;
     const tick = (timestamp: number) => {
       if (lastFrame === null) lastFrame = timestamp;
       const elapsed = timestamp - lastFrame;
-      if (elapsed >= frameInterval) {
+      if (elapsed >= frameInterval - 1) {
         const boundedElapsed = Math.min(elapsed, 100);
         const nextAngle =
           (globeSpinAngleRef.current +
@@ -2666,6 +2669,7 @@ export default function Home() {
     isGlobeSpinning,
     isRecordingGlobe,
     settings.globeSpinDirection,
+    settings.globeFrameRate,
     settings.globeSpinSpeed,
     settings.mode,
   ]);
@@ -2818,7 +2822,7 @@ export default function Home() {
       const lottie = globeLottieMarkup(settings, globeSpinAngleRef.current);
       downloadBlob(
         new Blob([lottie], { type: "video/lottie+json;charset=utf-8" }),
-        `guilloche-globe-${settings.globeSpinSpeed}rpm-${settings.canvasRatio.replace(":", "x")}.json`,
+        `guilloche-globe-${settings.globeSpinSpeed}rpm-${settings.globeFrameRate}fps-${settings.canvasRatio.replace(":", "x")}.json`,
       );
       flash("Vector Lottie loop exported.");
     } catch {
@@ -2840,7 +2844,7 @@ export default function Home() {
     const wasSpinning = isGlobeSpinning;
     const startingAngle = globeSpinAngleRef.current;
     const durationMs = globeTurnDuration * 1000;
-    const frameRate = 30;
+    const frameRate = settings.globeFrameRate;
     setIsGlobeSpinning(false);
     setIsRecordingGlobe(true);
     setRecordingProgress(0);
@@ -2853,7 +2857,7 @@ export default function Home() {
       const chunks: Blob[] = [];
       const recorder = new MediaRecorder(stream, {
         mimeType: format.mimeType,
-        videoBitsPerSecond: 12_000_000,
+        videoBitsPerSecond: frameRate === 60 ? 20_000_000 : 12_000_000,
       });
       const recordingComplete = new Promise<Blob>((resolve, reject) => {
         recorder.ondataavailable = (event) => {
@@ -2890,7 +2894,7 @@ export default function Home() {
       const blob = await recordingComplete;
       downloadBlob(
         blob,
-        `guilloche-globe-${settings.globeSpinSpeed}rpm-${settings.canvasRatio.replace(":", "x")}.${format.extension}`,
+        `guilloche-globe-${settings.globeSpinSpeed}rpm-${settings.globeFrameRate}fps-${settings.canvasRatio.replace(":", "x")}.${format.extension}`,
       );
       flash(`${format.label} rotation exported.`);
     } catch {
@@ -3805,6 +3809,32 @@ export default function Home() {
                   unit=" rpm"
                   onChange={(value) => update("globeSpinSpeed", value)}
                 />
+                <div className="range-control">
+                  <span className="control-label">
+                    <span>Frame rate</span>
+                    <output>{settings.globeFrameRate} fps</output>
+                  </span>
+                  <div className="segmented" aria-label="Frame rate">
+                    <button
+                      type="button"
+                      className={
+                        settings.globeFrameRate === 30 ? "is-active" : ""
+                      }
+                      onClick={() => update("globeFrameRate", 30)}
+                    >
+                      30 fps
+                    </button>
+                    <button
+                      type="button"
+                      className={
+                        settings.globeFrameRate === 60 ? "is-active" : ""
+                      }
+                      onClick={() => update("globeFrameRate", 60)}
+                    >
+                      60 fps
+                    </button>
+                  </div>
+                </div>
                 <div className="segmented" aria-label="Rotation direction">
                   <button
                     type="button"
@@ -3882,7 +3912,8 @@ export default function Home() {
                 <div className="math-note is-good">
                   <span>{globeTurnDuration.toFixed(1)} s loop</span>
                   <small>
-                    Exact 360° turn · vector JSON or MP4/WebM clip
+                    Exact 360° turn · {settings.globeFrameRate} fps vector or
+                    video
                   </small>
                 </div>
               </div>
