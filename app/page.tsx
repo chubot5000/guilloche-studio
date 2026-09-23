@@ -2103,8 +2103,8 @@ function hemisphereSegment(start: Vector3, end: Vector3, front: boolean) {
   const endIsFront = end.z >= 0;
   if (startIsFront === endIsFront) {
     if (startIsFront === front) return [start, end] as const;
-    const hidden = { x: -10, y: -10, z: 0 };
-    return [hidden, hidden] as const;
+    const collapsed = start.z >= end.z ? start : end;
+    return [collapsed, collapsed] as const;
   }
   const ratio = -start.z / (end.z - start.z);
   const horizon = {
