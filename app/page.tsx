@@ -4262,7 +4262,7 @@ export default function Home() {
                   onChange={(value) => update("lineWeight", value)}
                 />
               )}
-              {settings.mode !== "globe" && settings.mode !== "torus" && (
+              {settings.mode !== "torus" && (
                 <RangeControl
                   label="Ink opacity"
                   value={settings.opacity}
@@ -4272,9 +4272,7 @@ export default function Home() {
                   onChange={(value) => update("opacity", value)}
                 />
               )}
-              {settings.mode !== "globe" &&
-                settings.mode !== "torus" &&
-                settings.mode !== "moire" && (
+              {settings.mode !== "torus" && settings.mode !== "moire" && (
                 <label className="select-control">
                   <span>Vector detail</span>
                   <select
