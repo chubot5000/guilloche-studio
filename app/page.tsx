@@ -111,6 +111,7 @@ type Settings = {
   globeNodeSize: number;
   globeNodeStyle: GlobeNodeStyle;
   globeNodeShape: GlobeNodeShape;
+  globeStroke: string;
   globeNodeFill: string;
   globeNodeStroke: string;
   torusMajorRadius: number;
@@ -251,6 +252,7 @@ const baseSettings: Settings = {
   globeNodeSize: 4,
   globeNodeStyle: "filled",
   globeNodeShape: "circle",
+  globeStroke: "#8C857B",
   globeNodeFill: "#173A59",
   globeNodeStroke: "#C08C56",
   torusMajorRadius: 245,
@@ -481,6 +483,7 @@ const presets: Preset[] = [
       globeRoll: 2,
       globeBackOpacity: 0.13,
       globeNodeAmount: 0,
+      globeStroke: "#8C857B",
       lineWeight: 1.05,
       opacity: 0.9,
       paper: "#FBFAF7",
@@ -503,6 +506,7 @@ const presets: Preset[] = [
       globeNodeSize: 2.5,
       globeNodeStyle: "stroked",
       globeNodeShape: "diamond",
+      globeStroke: "#6D716E",
       globeNodeFill: "#F4F0E7",
       globeNodeStroke: "#6D716E",
       lineWeight: 0.52,
@@ -527,6 +531,7 @@ const presets: Preset[] = [
       globeNodeSize: 4.5,
       globeNodeStyle: "filled",
       globeNodeShape: "circle",
+      globeStroke: "#765F52",
       globeNodeFill: "#765F52",
       globeNodeStroke: "#C69A63",
       lineWeight: 0.7,
@@ -1918,6 +1923,7 @@ function pathStroke(
   path: RenderPath,
   colors: string[],
 ) {
+  if (settings.mode === "globe") return settings.globeStroke;
   return settings.colorMode === "single"
     ? settings.ink
     : colors[path.colorIndex % colors.length];
@@ -2246,8 +2252,7 @@ function globeLottieMarkup(settings: Settings, startingAngle: number) {
   );
   const { width, height } = canvasSize(settings);
   const { edges, vertices } = globeGeometry(settings.globeDetail);
-  const colors = palettes[settings.palette] ?? palettes.Treasury;
-  const edgeColorCount = settings.colorMode === "single" ? 1 : colors.length;
+  const edgeColorCount = 1;
   const selectedNodeIndices = selectedGlobeNodeIndices(
     vertices.length,
     settings.globeNodeAmount,
@@ -2285,8 +2290,7 @@ function globeLottieMarkup(settings: Settings, startingAngle: number) {
     layers.push(nodeLayer(vertexIndex, true));
   }
 
-  const outlineColor =
-    settings.colorMode === "single" ? settings.ink : colors[0];
+  const outlineColor = settings.globeStroke;
   layers.push({
     ddd: 0,
     ind: layerIndex++,
@@ -2339,8 +2343,7 @@ function globeLottieMarkup(settings: Settings, startingAngle: number) {
           nm: `Edge ${edgeIndex}`,
         });
       });
-      const color =
-        settings.colorMode === "single" ? settings.ink : colors[colorIndex];
+      const color = settings.globeStroke;
       edgeShapes.push({
         ty: "st",
         c: { a: 0, k: lottieColor(color) },
@@ -3779,6 +3782,75 @@ export default function Home() {
           {settings.mode === "globe" && (
             <details className="control-section" open>
               <summary>
+                <span>Appearance</span>
+                <span className="summary-mark" aria-hidden="true">
+                  <CaretDown size={13} weight="bold" />
+                </span>
+              </summary>
+              <div className="control-stack">
+                <div className="color-row">
+                  <label>
+                    <span>Mesh stroke</span>
+                    <span className="color-field">
+                      <input
+                        type="color"
+                        value={settings.globeStroke}
+                        aria-label="Globe mesh stroke color"
+                        onChange={(event) =>
+                          update("globeStroke", event.target.value)
+                        }
+                      />
+                      <code>{settings.globeStroke}</code>
+                    </span>
+                  </label>
+                  <label>
+                    <span>Background</span>
+                    <span className="color-field">
+                      <input
+                        type="color"
+                        value={settings.paper}
+                        aria-label="Globe background color"
+                        disabled={settings.transparent}
+                        onChange={(event) =>
+                          update("paper", event.target.value)
+                        }
+                      />
+                      <code>{settings.paper}</code>
+                    </span>
+                  </label>
+                </div>
+                <div className="segmented" aria-label="Globe background">
+                  <button
+                    type="button"
+                    className={!settings.transparent ? "is-active" : ""}
+                    onClick={() => update("transparent", false)}
+                  >
+                    Color
+                  </button>
+                  <button
+                    type="button"
+                    className={settings.transparent ? "is-active" : ""}
+                    onClick={() => update("transparent", true)}
+                  >
+                    Transparent
+                  </button>
+                </div>
+                <RangeControl
+                  label="Line weight"
+                  value={settings.lineWeight}
+                  min={0.25}
+                  max={2.5}
+                  step={0.05}
+                  unit=" px"
+                  onChange={(value) => update("lineWeight", value)}
+                />
+              </div>
+            </details>
+          )}
+
+          {settings.mode === "globe" && (
+            <details className="control-section" open>
+              <summary>
                 <span>Motion</span>
                 <span className="summary-mark" aria-hidden="true">
                   <CaretDown size={13} weight="bold" />
@@ -4099,14 +4171,15 @@ export default function Home() {
             </details>
           )}
 
-          <details className="control-section">
-            <summary>
+          {settings.mode !== "globe" && (
+            <details className="control-section">
+              <summary>
               <span>Finish</span>
               <span className="summary-mark" aria-hidden="true">
                 <CaretDown size={13} weight="bold" />
               </span>
-            </summary>
-            <div className="control-stack">
+              </summary>
+              <div className="control-stack">
               <div className="segmented" aria-label="Color mode">
                 <button
                   type="button"
@@ -4216,8 +4289,9 @@ export default function Home() {
                   </select>
                 </label>
               )}
-            </div>
-          </details>
+              </div>
+            </details>
+          )}
         </aside>
 
         <section className="preview-panel" aria-label="Guilloché preview">

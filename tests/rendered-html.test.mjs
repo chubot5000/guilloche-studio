@@ -139,6 +139,22 @@ test("exports globe paths with exactly front and rear opacity groups", async () 
   assert.match(source, /strokeColor: globeNodeStroke/);
 });
 
+test("uses dedicated globe stroke and background controls across exports", async () => {
+  const source = await readFile(
+    new URL("../app/page.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /globeStroke: "#8C857B"/);
+  assert.match(source, /settings\.mode === "globe"\) return settings\.globeStroke/);
+  assert.match(source, /Globe mesh stroke color/);
+  assert.match(source, /Globe background color/);
+  assert.match(source, /aria-label="Globe background"/);
+  assert.match(source, /const outlineColor = settings\.globeStroke/);
+  assert.match(source, /const color = settings\.globeStroke/);
+  assert.match(source, /if \(!settings\.transparent\)/);
+});
+
 test("keeps globe nodes above their hemisphere mesh without line bleed", async () => {
   const source = await readFile(
     new URL("../app/page.tsx", import.meta.url),
