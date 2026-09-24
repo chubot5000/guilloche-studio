@@ -2862,8 +2862,10 @@ export default function Home() {
       const reduction = Math.round(
         (1 - archive.byteLength / new Blob([lottie]).size) * 100,
       );
+      const blobData = new Uint8Array(archive.byteLength);
+      blobData.set(archive);
       downloadBlob(
-        new Blob([archive], { type: "application/zip+dotlottie" }),
+        new Blob([blobData], { type: "application/zip+dotlottie" }),
         `guilloche-globe-${settings.globeSpinSpeed}rpm-${settings.globeFrameRate}fps-${settings.canvasRatio.replace(":", "x")}.lottie`,
       );
       flash(`Compact .lottie exported · ${reduction}% smaller.`);
