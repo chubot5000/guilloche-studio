@@ -187,6 +187,11 @@ test("animates and exports a mathematically projected globe rotation", async () 
   assert.match(source, /globeFrameRate: 60/);
   assert.match(source, /1000 \/ settings\.globeFrameRate/);
   assert.match(source, /function globeLottieMarkup\(/);
+  assert.match(source, /const sampleCount = frameRate === 30 \? 24 : 36/);
+  assert.match(source, /function lottiePrecise\(/);
+  assert.match(source, /value !== values\[index - 1\]/);
+  assert.match(source, /point\.z >= 0 \? 100 : settings\.globeBackOpacity \* 100/);
+  assert.doesNotMatch(source, /nodeLayer\(vertexIndex, false\)/);
   assert.match(source, /function hemisphereSegment\(/);
   assert.match(source, /const collapsed = start\.z >= end\.z \? start : end/);
   assert.doesNotMatch(source, /const hidden = \{ x: -10, y: -10, z: 0 \}/);
@@ -194,6 +199,7 @@ test("animates and exports a mathematically projected globe rotation", async () 
   assert.match(source, /"animations\/globe\.json"/);
   assert.match(source, /application\/zip\+dotlottie/);
   assert.match(source, /Export \.lottie/);
+  assert.match(source, /RPM only changes duration/);
   assert.match(source, /canvas\.captureStream\(frameRate\)/);
   assert.match(source, /frameRate === 60 \? 20_000_000 : 12_000_000/);
   assert.match(source, /new MediaRecorder\(/);

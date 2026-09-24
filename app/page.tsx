@@ -642,6 +642,10 @@ function precise(value: number) {
   return Number(value.toFixed(3));
 }
 
+function lottiePrecise(value: number) {
+  return Number(value.toFixed(2));
+}
+
 function safeHatchThickness(
   settings: Pick<
     Settings,
@@ -2085,8 +2089,8 @@ function lottieLineShape(start: Vector3, end: Vector3) {
   return {
     c: false,
     v: [
-      [precise(start.x), precise(start.y)],
-      [precise(end.x), precise(end.y)],
+      [lottiePrecise(start.x), lottiePrecise(start.y)],
+      [lottiePrecise(end.x), lottiePrecise(end.y)],
     ],
     i: [
       [0, 0],
@@ -2145,7 +2149,7 @@ function lottiePositionKeyframes(
     const frame = Number(
       ((index / (values.length - 1)) * totalFrames).toFixed(3),
     );
-    const position = [precise(value.x), precise(value.y), 0];
+    const position = [lottiePrecise(value.x), lottiePrecise(value.y), 0];
     return index === values.length - 1
       ? { t: frame, s: position }
       : {
@@ -2161,11 +2165,19 @@ function lottieOpacityKeyframes(
   values: number[],
   totalFrames: number,
 ) {
-  return values.map((value, index) => {
+  const keyframes = values
+    .map((value, index) => ({ value, index }))
+    .filter(
+      ({ value, index }) =>
+        index === 0 ||
+        index === values.length - 1 ||
+        value !== values[index - 1],
+    );
+  return keyframes.map(({ value, index }, keyframeIndex) => {
     const frame = Number(
       ((index / (values.length - 1)) * totalFrames).toFixed(3),
     );
-    return index === values.length - 1
+    return keyframeIndex === keyframes.length - 1
       ? { t: frame, s: [value] }
       : { t: frame, s: [value], h: 1 };
   });
@@ -2243,7 +2255,11 @@ function globeLottieMarkup(settings: Settings, startingAngle: number) {
     1,
     Math.round((60 / settings.globeSpinSpeed) * frameRate),
   );
-  const sampleCount = settings.globeDetail === 3 ? 48 : 72;
+  // Lottie interpolates between vector keyframes at the requested playback FPS.
+  // Sampling one turn at every rendered frame only duplicates geometry, so the
+  // web export keeps enough angular samples for a smooth sphere while making
+  // 30 fps meaningfully lighter than 60 fps.
+  const sampleCount = frameRate === 30 ? 24 : 36;
   const direction = settings.globeSpinDirection;
   const samples = Array.from({ length: sampleCount + 1 }, (_, index) =>
     projectGlobeVertices(
@@ -2261,17 +2277,16 @@ function globeLottieMarkup(settings: Settings, startingAngle: number) {
   let layerIndex = 1;
   const layers: LottieLayer[] = [];
 
-  const nodeLayer = (vertexIndex: number, front: boolean): LottieLayer => {
+  const nodeLayer = (vertexIndex: number): LottieLayer => {
     const positions = samples.map((sample) => sample[vertexIndex]);
-    const opacities = positions.map((point) => {
-      const visible = front ? point.z >= 0 : point.z < 0;
-      return visible ? (front ? 100 : settings.globeBackOpacity * 100) : 0;
-    });
+    const opacities = positions.map((point) =>
+      point.z >= 0 ? 100 : settings.globeBackOpacity * 100,
+    );
     return {
       ddd: 0,
       ind: layerIndex++,
       ty: 4,
-      nm: `${front ? "Front" : "Rear"} node ${vertexIndex}`,
+      nm: `Node ${vertexIndex}`,
       sr: 1,
       ks: {
         ...lottieTransform(),
@@ -2288,7 +2303,7 @@ function globeLottieMarkup(settings: Settings, startingAngle: number) {
   };
 
   for (const vertexIndex of selectedNodeIndices) {
-    layers.push(nodeLayer(vertexIndex, true));
+    layers.push(nodeLayer(vertexIndex));
   }
 
   const outlineColor = settings.globeStroke;
@@ -2376,9 +2391,6 @@ function globeLottieMarkup(settings: Settings, startingAngle: number) {
   };
 
   edgeLayers(true);
-  for (const vertexIndex of selectedNodeIndices) {
-    layers.push(nodeLayer(vertexIndex, false));
-  }
   edgeLayers(false);
 
   if (!settings.transparent) {
@@ -2862,13 +2874,16 @@ export default function Home() {
       const reduction = Math.round(
         (1 - archive.byteLength / new Blob([lottie]).size) * 100,
       );
+      const exportSize = Math.max(1, Math.round(archive.byteLength / 1024));
       const blobData = new Uint8Array(archive.byteLength);
       blobData.set(archive);
       downloadBlob(
         new Blob([blobData], { type: "application/zip+dotlottie" }),
         `guilloche-globe-${settings.globeSpinSpeed}rpm-${settings.globeFrameRate}fps-${settings.canvasRatio.replace(":", "x")}.lottie`,
       );
-      flash(`Compact .lottie exported · ${reduction}% smaller.`);
+      flash(
+        `Compact .lottie exported · ${exportSize} KB · ${reduction}% smaller.`,
+      );
     } catch {
       flash("The Lottie loop could not be generated.");
     } finally {
@@ -4025,8 +4040,8 @@ export default function Home() {
                 <div className="math-note is-good">
                   <span>{globeTurnDuration.toFixed(1)} s loop</span>
                   <small>
-                    Exact 360° turn · {settings.globeFrameRate} fps vector or
-                    video
+                    Exact 360° · web-optimized {settings.globeFrameRate} fps ·
+                    RPM only changes duration
                   </small>
                 </div>
               </div>
