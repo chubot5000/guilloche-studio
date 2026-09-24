@@ -27,6 +27,7 @@ import { Record } from "@phosphor-icons/react/Record";
 import { FileJs } from "@phosphor-icons/react/FileJs";
 import { WaveSine } from "@phosphor-icons/react/WaveSine";
 import { Waves } from "@phosphor-icons/react/Waves";
+import { strToU8, zip } from "fflate";
 
 type ColorMode = "single" | "layered";
 type PatternMode =
@@ -2428,6 +2429,40 @@ function globeLottieMarkup(settings: Settings, startingAngle: number) {
   });
 }
 
+function compactLottieArchive(animation: string) {
+  const manifest = JSON.stringify({
+    version: "1",
+    generator: "Rouletté Guilloché Studio",
+    animations: [
+      {
+        id: "globe",
+        autoplay: true,
+        loop: true,
+        speed: 1,
+        direction: 1,
+        playMode: "normal",
+      },
+    ],
+  });
+
+  return new Promise<Uint8Array>((resolve, reject) => {
+    zip(
+      {
+        "manifest.json": strToU8(manifest),
+        "animations/globe.json": strToU8(animation),
+      },
+      { level: 9 },
+      (error, archive) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(archive);
+      },
+    );
+  });
+}
+
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -2823,11 +2858,15 @@ export default function Home() {
     await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
     try {
       const lottie = globeLottieMarkup(settings, globeSpinAngleRef.current);
-      downloadBlob(
-        new Blob([lottie], { type: "video/lottie+json;charset=utf-8" }),
-        `guilloche-globe-${settings.globeSpinSpeed}rpm-${settings.globeFrameRate}fps-${settings.canvasRatio.replace(":", "x")}.json`,
+      const archive = await compactLottieArchive(lottie);
+      const reduction = Math.round(
+        (1 - archive.byteLength / new Blob([lottie]).size) * 100,
       );
-      flash("Vector Lottie loop exported.");
+      downloadBlob(
+        new Blob([archive], { type: "application/zip+dotlottie" }),
+        `guilloche-globe-${settings.globeSpinSpeed}rpm-${settings.globeFrameRate}fps-${settings.canvasRatio.replace(":", "x")}.lottie`,
+      );
+      flash(`Compact .lottie exported · ${reduction}% smaller.`);
     } catch {
       flash("The Lottie loop could not be generated.");
     } finally {
@@ -3962,7 +4001,7 @@ export default function Home() {
                     disabled={isRecordingGlobe || isExportingLottie}
                   >
                     <FileJs size={15} weight="regular" aria-hidden="true" />
-                    {isExportingLottie ? "Building…" : "Export Lottie"}
+                    {isExportingLottie ? "Compressing…" : "Export .lottie"}
                   </button>
                 </div>
                 {isRecordingGlobe && (

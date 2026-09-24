@@ -190,7 +190,10 @@ test("animates and exports a mathematically projected globe rotation", async () 
   assert.match(source, /function hemisphereSegment\(/);
   assert.match(source, /const collapsed = start\.z >= end\.z \? start : end/);
   assert.doesNotMatch(source, /const hidden = \{ x: -10, y: -10, z: 0 \}/);
-  assert.match(source, /Export Lottie/);
+  assert.match(source, /function compactLottieArchive\(/);
+  assert.match(source, /"animations\/globe\.json"/);
+  assert.match(source, /application\/zip\+dotlottie/);
+  assert.match(source, /Export \.lottie/);
   assert.match(source, /canvas\.captureStream\(frameRate\)/);
   assert.match(source, /frameRate === 60 \? 20_000_000 : 12_000_000/);
   assert.match(source, /new MediaRecorder\(/);
